@@ -4,6 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Khata — Accounting</title>
+    <script>
+      window.addEventListener('error', function (e) {
+        var el = document.getElementById('root');
+        if (el) {
+          el.innerHTML = '<pre style="white-space:pre-wrap;padding:20px;font-family:monospace;color:#a13d3d;">Error: ' + (e.message || e) + '</pre>';
+        }
+      });
+      window.addEventListener('unhandledrejection', function (e) {
+        var el = document.getElementById('root');
+        if (el) {
+          el.innerHTML = '<pre style="white-space:pre-wrap;padding:20px;font-family:monospace;color:#a13d3d;">Error: ' + (e.reason && e.reason.message ? e.reason.message : e.reason) + '</pre>';
+        }
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>
