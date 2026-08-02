@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   LayoutDashboard, FileText, Receipt, Wallet, ScrollText, Package, ClipboardList,
   Plus, Trash2, X, LogOut, ShieldCheck, User, AlertCircle,
-  CheckCircle2, Loader2, PieChart
+  CheckCircle2, Loader2, PieChart, Menu
 } from "lucide-react";
 import { supabase } from "./supabaseClient";
 
@@ -128,6 +128,31 @@ function GlobalStyles() {
       .row-hover:hover { background: #FAFAFA; }
       ::-webkit-scrollbar { width: 8px; height: 8px; }
       ::-webkit-scrollbar-thumb { background: #E4E4E4; border-radius: 4px; }
+
+      .mobile-topbar { display: none; }
+      .sidebar-overlay { display: none; }
+
+      @media (max-width: 860px) {
+        .app-shell { flex-direction: column; }
+        .app-sidebar {
+          position: fixed; top: 0; left: 0; height: 100vh; z-index: 200;
+          transform: translateX(-100%); transition: transform .22s ease;
+          box-shadow: 0 0 0 rgba(0,0,0,0);
+        }
+        .app-sidebar.open { transform: translateX(0); box-shadow: 10px 0 30px rgba(0,0,0,0.15); }
+        .mobile-topbar {
+          display: flex; align-items: center; justify-content: space-between;
+          padding: 14px 16px; background: #fff; border-bottom: 1px solid ${PALETTE.line};
+          position: sticky; top: 0; z-index: 60;
+        }
+        .sidebar-overlay.open {
+          display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 150;
+        }
+        .app-main { padding: 18px 16px !important; }
+        .responsive-grid { grid-template-columns: 1fr !important; }
+        .responsive-form-row { grid-template-columns: 1fr !important; }
+        table { min-width: 560px; }
+      }
     `}</style>
   );
 }
@@ -219,6 +244,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [tab, setTab] = useState("dashboard");
   const [toast, setToast] = useState(null);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -318,10 +344,29 @@ export default function App() {
   const incomeAccount = accounts.find((a) => a.type === "income");
 
   return (
-    <div style={styles.appShell}>
+    <div className="app-shell" style={styles.appShell}>
       <GlobalStyles />
-      <Sidebar tab={tab} setTab={setTab} currentUser={currentUser} onLogout={() => setCurrentUser(null)} />
-      <main style={styles.main}>
+      <div className="mobile-topbar">
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 30, height: 30, borderRadius: 9, background: PALETTE.accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <PieChart size={16} color="#fff" />
+          </div>
+          <span style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 600 }}>Khata</span>
+        </div>
+        <button className="pin-btn" onClick={() => setMobileNavOpen(true)} style={{ background: "transparent", padding: 6 }}>
+          <Menu size={22} color={PALETTE.ink} />
+        </button>
+      </div>
+      <div className={`sidebar-overlay ${mobileNavOpen ? "open" : ""}`} onClick={() => setMobileNavOpen(false)} />
+      <Sidebar
+        tab={tab}
+        setTab={(t) => { setTab(t); setMobileNavOpen(false); }}
+        currentUser={currentUser}
+        onLogout={() => setCurrentUser(null)}
+        mobileOpen={mobileNavOpen}
+        onCloseMobile={() => setMobileNavOpen(false)}
+      />
+      <main className="app-main" style={styles.main}>
         {toast && (
           <div style={{ ...styles.toast, borderColor: toast.kind === "ok" ? PALETTE.credit : PALETTE.debit }}>
             {toast.kind === "ok" ? <CheckCircle2 size={16} color={PALETTE.credit} /> : <AlertCircle size={16} color={PALETTE.debit} />}
@@ -531,7 +576,7 @@ function LoginScreen({ users, onCreateFirstAdmin, onLogin }) {
    Sidebar
 --------------------------------------------------------- */
 
-function Sidebar({ tab, setTab, currentUser, onLogout }) {
+function Sidebar({ tab, setTab, currentUser, onLogout, mobileOpen, onCloseMobile }) {
   const items = [
     { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { key: "invoices", label: "Invoices", icon: FileText },
@@ -545,12 +590,17 @@ function Sidebar({ tab, setTab, currentUser, onLogout }) {
   if (currentUser.role === "admin") items.push({ key: "users", label: "Users", icon: User });
 
   return (
-    <aside style={{ width: 236, background: "#fff", borderRight: `1px solid ${PALETTE.line}`, display: "flex", flexDirection: "column", padding: "26px 14px", flexShrink: 0 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 8px", marginBottom: 26 }}>
-        <div style={{ width: 32, height: 32, borderRadius: 10, background: PALETTE.accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <PieChart size={16} color="#fff" />
+    <aside className={`app-sidebar ${mobileOpen ? "open" : ""}`} style={{ width: 236, background: "#fff", borderRight: `1px solid ${PALETTE.line}`, display: "flex", flexDirection: "column", padding: "26px 14px", flexShrink: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 8px", marginBottom: 26 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 32, height: 32, borderRadius: 10, background: PALETTE.accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <PieChart size={16} color="#fff" />
+          </div>
+          <span style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 600, color: PALETTE.ink }}>Khata</span>
         </div>
-        <span style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 600, color: PALETTE.ink }}>Khata</span>
+        <button className="pin-btn" onClick={onCloseMobile} style={{ background: "transparent", padding: 4, display: mobileOpen ? "block" : "none" }}>
+          <X size={20} color={PALETTE.inkSoft} />
+        </button>
       </div>
 
       <nav style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
@@ -617,11 +667,11 @@ function Dashboard({ accounts, balances, journal, products }) {
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: 16 }}>
+      <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: 16 }}>
         <Card>
           <div style={{ fontFamily: FONT.display, fontSize: 15.5, marginBottom: 12, fontWeight: 600 }}>Recent Journal Entries</div>
           {recent.length === 0 ? <EmptyState text="No entries yet. Add an invoice, bill, or expense to see it here." /> : (
-            <table>
+            <div style={{ overflowX: "auto" }}><table style={{ minWidth: 560 }}>
               <thead><tr style={{ borderBottom: `1px solid ${PALETTE.line}` }}><Th>Date</Th><Th>Memo</Th><Th align="right">Amount</Th><Th>By</Th></tr></thead>
               <tbody>
                 {recent.map((j) => {
@@ -633,7 +683,7 @@ function Dashboard({ accounts, balances, journal, products }) {
                   );
                 })}
               </tbody>
-            </table>
+            </table></div>
           )}
         </Card>
 
@@ -681,7 +731,7 @@ function Inventory({ products, currentUser, onAdd, onDelete }) {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
         <PageHeader title="Inventory" subtitle="Your products and current stock on hand" />
         {isAdmin && (
           <PrimaryButton onClick={() => setOpen((v) => !v)}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Product"}</PrimaryButton>
@@ -690,7 +740,7 @@ function Inventory({ products, currentUser, onAdd, onDelete }) {
 
       {open && (
         <Card style={{ marginBottom: 22 }}>
-          <form onSubmit={submit} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 110px", gap: 12 }}>
+          <form onSubmit={submit} className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 110px", gap: 12 }}>
             <div><label style={labelStyle}>Product Name</label><input style={inputStyle} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Blue Cotton Dress" /></div>
             <div><label style={labelStyle}>SKU (optional)</label><input style={inputStyle} value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} placeholder="SKU-001" /></div>
             <div><label style={labelStyle}>Unit</label><input style={inputStyle} value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="pcs" /></div>
@@ -787,7 +837,7 @@ function Bills({ accounts, products, bills, currentUser, onAdd, onMarkPaid, onDe
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
         <PageHeader title="Bills" subtitle="Record a purchase â stock is added to inventory automatically" />
         <PrimaryButton onClick={() => setOpen((v) => !v)}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Bill"}</PrimaryButton>
       </div>
@@ -798,7 +848,7 @@ function Bills({ accounts, products, bills, currentUser, onAdd, onMarkPaid, onDe
             <EmptyState text="Add a product in Inventory first, then you can record a bill for it." />
           ) : (
             <form onSubmit={submit}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 160px", gap: 10 }}>
+              <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 160px", gap: 10 }}>
                 <div><label style={labelStyle}>Vendor</label><input style={inputStyle} value={vendor} onChange={(e) => setVendor(e.target.value)} placeholder="Supplier name" /></div>
                 <div><label style={labelStyle}>Date</label><input type="date" style={inputStyle} value={date} onChange={(e) => setDate(e.target.value)} /></div>
               </div>
@@ -806,7 +856,7 @@ function Bills({ accounts, products, bills, currentUser, onAdd, onMarkPaid, onDe
               <div style={{ marginTop: 14 }}>
                 <label style={labelStyle}>Items Purchased</label>
                 {items.map((it, i) => (
-                  <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 90px 120px 30px", gap: 8, marginBottom: 8 }}>
+                  <div key={i} className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 90px 120px 30px", gap: 8, marginBottom: 8 }}>
                     <select style={inputStyle} value={it.productId} onChange={(e) => updateItem(i, "productId", e.target.value)}>
                       <option value="">Select product</option>
                       {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -839,7 +889,7 @@ function Bills({ accounts, products, bills, currentUser, onAdd, onMarkPaid, onDe
 
       <Card>
         {bills.length === 0 ? <EmptyState text="No bills recorded yet" /> : (
-          <table>
+          <div style={{ overflowX: "auto" }}><table style={{ minWidth: 560 }}>
             <thead><tr style={{ borderBottom: `1px solid ${PALETTE.line}` }}><Th>Bill No.</Th><Th>Vendor</Th><Th>Date</Th><Th align="right">Total</Th><Th>Status</Th><Th> </Th></tr></thead>
             <tbody>
               {bills.map((b) => (
@@ -867,7 +917,7 @@ function Bills({ accounts, products, bills, currentUser, onAdd, onMarkPaid, onDe
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
       </Card>
     </div>
@@ -938,7 +988,7 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onMarkPaid
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
         <PageHeader title="Invoices" subtitle="Create a new invoice â inventory and journal entries update automatically" />
         <PrimaryButton onClick={() => setOpen((v) => !v)}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Invoice"}</PrimaryButton>
       </div>
@@ -946,7 +996,7 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onMarkPaid
       {open && (
         <Card style={{ marginBottom: 20 }}>
           <form onSubmit={submit}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 160px 160px", gap: 10 }}>
+            <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 160px 160px", gap: 10 }}>
               <div><label style={labelStyle}>Customer Name</label><input style={inputStyle} value={customer} onChange={(e) => setCustomer(e.target.value)} placeholder="Customer / company" /></div>
               <div><label style={labelStyle}>Date</label><input type="date" style={inputStyle} value={date} onChange={(e) => setDate(e.target.value)} /></div>
               <div><label style={labelStyle}>Due Date</label><input type="date" style={inputStyle} value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></div>
@@ -959,7 +1009,7 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onMarkPaid
                 const short = p && Number(it.qty) > Number(p.qty);
                 return (
                   <div key={i} style={{ marginBottom: 8 }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "160px 1fr 80px 120px 30px", gap: 8 }}>
+                    <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "160px 1fr 80px 120px 30px", gap: 8 }}>
                       <select style={inputStyle} value={it.productId} onChange={(e) => updateItem(i, "productId", e.target.value)}>
                         <option value="">Other (no stock)</option>
                         {products.map((pr) => <option key={pr.id} value={pr.id}>{pr.name}</option>)}
@@ -988,7 +1038,7 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onMarkPaid
 
       <Card>
         {invoices.length === 0 ? <EmptyState text="No invoices yet" /> : (
-          <table>
+          <div style={{ overflowX: "auto" }}><table style={{ minWidth: 560 }}>
             <thead><tr style={{ borderBottom: `1px solid ${PALETTE.line}` }}><Th>No.</Th><Th>Customer</Th><Th>Date</Th><Th align="right">Total</Th><Th>Status</Th><Th>Payment</Th><Th> </Th></tr></thead>
             <tbody>
               {invoices.map((inv) => (
@@ -1020,7 +1070,7 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onMarkPaid
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
       </Card>
     </div>
@@ -1055,7 +1105,7 @@ function Expenses({ accounts, expenses, currentUser, onAdd, onDelete }) {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
         <PageHeader title="Expenses" subtitle="Operating costs like rent, utilities, and salaries" />
         <PrimaryButton onClick={() => setOpen((v) => !v)}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Expense"}</PrimaryButton>
       </div>
@@ -1063,12 +1113,12 @@ function Expenses({ accounts, expenses, currentUser, onAdd, onDelete }) {
       {open && (
         <Card style={{ marginBottom: 20 }}>
           <form onSubmit={submit}>
-            <div style={{ display: "grid", gridTemplateColumns: "140px 1fr 140px", gap: 10 }}>
+            <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "140px 1fr 140px", gap: 10 }}>
               <div><label style={labelStyle}>Date</label><input type="date" style={inputStyle} value={date} onChange={(e) => setDate(e.target.value)} /></div>
               <div><label style={labelStyle}>Vendor / Paid To</label><input style={inputStyle} value={vendor} onChange={(e) => setVendor(e.target.value)} placeholder="e.g. Electricity Bill" /></div>
               <div><label style={labelStyle}>Amount (BDT)</label><input style={inputStyle} type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" /></div>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
+            <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
               <div><label style={labelStyle}>Expense Category</label><select style={inputStyle} value={accountId} onChange={(e) => setAccountId(e.target.value)}><option value="">Select</option>{expenseAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
               <div><label style={labelStyle}>Paid From (Account)</label><select style={inputStyle} value={paymentAccountId} onChange={(e) => setPaymentAccountId(e.target.value)}><option value="">Select</option>{cashAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
             </div>
@@ -1080,7 +1130,7 @@ function Expenses({ accounts, expenses, currentUser, onAdd, onDelete }) {
 
       <Card>
         {expenses.length === 0 ? <EmptyState text="No expenses added yet" /> : (
-          <table>
+          <div style={{ overflowX: "auto" }}><table style={{ minWidth: 560 }}>
             <thead><tr style={{ borderBottom: `1px solid ${PALETTE.line}` }}><Th>Date</Th><Th>Vendor</Th><Th>Category</Th><Th>Paid From</Th><Th align="right">Amount</Th><Th>By</Th><Th> </Th></tr></thead>
             <tbody>
               {expenses.map((exp) => {
@@ -1096,7 +1146,7 @@ function Expenses({ accounts, expenses, currentUser, onAdd, onDelete }) {
                 );
               })}
             </tbody>
-          </table>
+          </table></div>
         )}
       </Card>
     </div>
@@ -1123,14 +1173,14 @@ function ChartOfAccounts({ accounts, balances, currentUser, onAdd, onDelete }) {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
         <PageHeader title="Chart of Accounts" subtitle="All accounts in the business and their balances" />
         {isAdmin && <PrimaryButton onClick={() => setOpen((v) => !v)}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Account"}</PrimaryButton>}
       </div>
 
       {open && (
         <Card style={{ marginBottom: 20 }}>
-          <form onSubmit={submit} style={{ display: "grid", gridTemplateColumns: "100px 1fr 160px auto", gap: 10, alignItems: "end" }}>
+          <form onSubmit={submit} className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "100px 1fr 160px auto", gap: 10, alignItems: "end" }}>
             <div><label style={labelStyle}>Code</label><input style={inputStyle} value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="6000" /></div>
             <div><label style={labelStyle}>Name</label><input style={inputStyle} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Account name" /></div>
             <div><label style={labelStyle}>Type</label><select style={inputStyle} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>{ACCOUNT_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}</select></div>
@@ -1144,7 +1194,7 @@ function ChartOfAccounts({ accounts, balances, currentUser, onAdd, onDelete }) {
           <Card key={g.key}>
             <div style={{ fontFamily: FONT.display, fontSize: 15, marginBottom: 10, fontWeight: 600 }}>{g.label}</div>
             {g.items.length === 0 ? <EmptyState text="No accounts yet" /> : (
-              <table>
+              <div style={{ overflowX: "auto" }}><table style={{ minWidth: 560 }}>
                 <thead><tr style={{ borderBottom: `1px solid ${PALETTE.line}` }}><Th>Code</Th><Th>Name</Th><Th align="right">Balance</Th>{isAdmin && <Th align="right"> </Th>}</tr></thead>
                 <tbody>
                   {g.items.map((a) => (
@@ -1154,7 +1204,7 @@ function ChartOfAccounts({ accounts, balances, currentUser, onAdd, onDelete }) {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             )}
           </Card>
         ))}
@@ -1188,7 +1238,7 @@ function Journal({ accounts, journal, currentUser, onAdd, onDelete }) {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
         <PageHeader title="Journal" subtitle="Log of every debit/credit entry (also auto-created from invoices, bills and expenses)" />
         <PrimaryButton onClick={() => setOpen((v) => !v)}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "Manual Entry"}</PrimaryButton>
       </div>
@@ -1196,12 +1246,12 @@ function Journal({ accounts, journal, currentUser, onAdd, onDelete }) {
       {open && (
         <Card style={{ marginBottom: 20 }}>
           <form onSubmit={submit}>
-            <div style={{ display: "grid", gridTemplateColumns: "160px 1fr", gap: 10, marginBottom: 10 }}>
+            <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "160px 1fr", gap: 10, marginBottom: 10 }}>
               <div><label style={labelStyle}>Date</label><input type="date" style={inputStyle} value={date} onChange={(e) => setDate(e.target.value)} /></div>
               <div><label style={labelStyle}>Description / Memo</label><input style={inputStyle} value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="What is this entry for" /></div>
             </div>
             {lines.map((l, i) => (
-              <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 130px 130px 30px", gap: 8, marginBottom: 8, alignItems: "center" }}>
+              <div key={i} className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 130px 130px 30px", gap: 8, marginBottom: 8, alignItems: "center" }}>
                 <select style={inputStyle} value={l.accountId} onChange={(e) => updateLine(i, "accountId", e.target.value)}>
                   <option value="">Select account</option>
                   {accounts.map((a) => <option key={a.id} value={a.id}>{a.code} â {a.name}</option>)}
@@ -1225,7 +1275,7 @@ function Journal({ accounts, journal, currentUser, onAdd, onDelete }) {
 
       <Card>
         {journal.length === 0 ? <EmptyState text="No journal entries yet" /> : (
-          <table>
+          <div style={{ overflowX: "auto" }}><table style={{ minWidth: 560 }}>
             <thead><tr style={{ borderBottom: `1px solid ${PALETTE.line}` }}><Th>Date</Th><Th>Memo</Th><Th>Lines</Th><Th align="right">Total</Th><Th>By</Th>{isAdmin && <Th> </Th>}</tr></thead>
             <tbody>
               {journal.map((j) => {
@@ -1243,7 +1293,7 @@ function Journal({ accounts, journal, currentUser, onAdd, onDelete }) {
                 );
               })}
             </tbody>
-          </table>
+          </table></div>
         )}
       </Card>
     </div>
@@ -1269,7 +1319,7 @@ function Reports({ accounts, balances }) {
     <div>
       <PageHeader title="Trial Balance" subtitle="Debit and credit balances for every account â the two columns should match when the books are correct" />
       <Card>
-        <table>
+        <div style={{ overflowX: "auto" }}><table style={{ minWidth: 560 }}>
           <thead><tr style={{ borderBottom: `2px solid ${PALETTE.ink}` }}><Th>Code</Th><Th>Account</Th><Th align="right">Debit</Th><Th align="right">Credit</Th></tr></thead>
           <tbody>
             {rows.map((r) => (
@@ -1279,7 +1329,7 @@ function Reports({ accounts, balances }) {
             ))}
           </tbody>
           <tfoot><tr style={{ borderTop: `2px solid ${PALETTE.ink}` }}><Td></Td><Td><b>Total</b></Td><Td align="right" mono><b>{fmtMoney(totalDebit)}</b></Td><Td align="right" mono><b>{fmtMoney(totalCredit)}</b></Td></tr></tfoot>
-        </table>
+        </table></div>
         <div style={{ marginTop: 14, fontSize: 13, color: totalDebit === totalCredit ? PALETTE.credit : PALETTE.debit, display: "flex", alignItems: "center", gap: 6 }}>
           {totalDebit === totalCredit ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
           {totalDebit === totalCredit ? "Books balance (Debit = Credit)" : "Books don't balance â check journal entries"}
@@ -1308,14 +1358,14 @@ function UsersPanel({ users, onAdd, onDelete }) {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
         <PageHeader title="Users" subtitle="Manage your team's access" />
         <PrimaryButton onClick={() => setOpen((v) => !v)}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New User"}</PrimaryButton>
       </div>
 
       {open && (
         <Card style={{ marginBottom: 20 }}>
-          <form onSubmit={submit} style={{ display: "grid", gridTemplateColumns: "1fr 140px 140px auto", gap: 10, alignItems: "end" }}>
+          <form onSubmit={submit} className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 140px 140px auto", gap: 10, alignItems: "end" }}>
             <div><label style={labelStyle}>Name</label><input style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} /></div>
             <div><label style={labelStyle}>PIN (4+ digits)</label><input style={inputStyle} value={pin} onChange={(e) => setPin(e.target.value)} /></div>
             <div><label style={labelStyle}>Role</label><select style={inputStyle} value={role} onChange={(e) => setRole(e.target.value)}><option value="staff">Staff (limited)</option><option value="admin">Admin</option></select></div>
@@ -1325,7 +1375,7 @@ function UsersPanel({ users, onAdd, onDelete }) {
       )}
 
       <Card>
-        <table>
+        <div style={{ overflowX: "auto" }}><table style={{ minWidth: 560 }}>
           <thead><tr style={{ borderBottom: `1px solid ${PALETTE.line}` }}><Th>Name</Th><Th>Role</Th><Th> </Th></tr></thead>
           <tbody>
             {users.map((u) => (
@@ -1335,7 +1385,7 @@ function UsersPanel({ users, onAdd, onDelete }) {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       </Card>
       <p style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 12 }}>Note: this PIN system is a simple access control for your 4â5 trusted team members â not banking-grade security. Don't share the link outside your team.</p>
     </div>
