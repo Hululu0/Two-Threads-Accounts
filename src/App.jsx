@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   LayoutDashboard, FileText, Receipt, Wallet, ScrollText, Package, ClipboardList,
   Plus, Trash2, X, LogOut, ShieldCheck, User, AlertCircle,
-  CheckCircle2, Loader2, PieChart, Menu, Search, Download, Eye
+  CheckCircle2, Loader2, PieChart, Menu, Search, Download, Eye, Edit2
 } from "lucide-react";
 import { supabase } from "./supabaseClient";
 import * as XLSX from "xlsx";
@@ -662,7 +662,38 @@ export default function App() {
             accounts={accounts} balances={balances} currentUser={currentUser}
             onAdd={async (acc) => { await persistAccounts([...accounts, { ...acc, id: uid("acc") }]); showToast("Account added"); }}
             onAddMany={async (accs) => { await persistAccounts([...accounts, ...accs.map((a) => ({ ...a, id: uid("acc") }))]); showToast(`${accs.length} accounts added`); }}
+            onEdit={async (id, updates) => { await persistAccounts(accounts.map((a) => (a.id === id ? { ...a, ...updates } : a))); showToast("Account updated"); }}
             onDelete={async (id) => { await persistAccounts(accounts.filter((a) => a.id !== id)); showToast("Account deleted"); }}
+            onAdjustBalance={async (account, targetBalance, date, note) => {
+              const equityAccount = accounts.find((a) => a.name === "Owner's Equity");
+              if (!equityAccount) { showToast("Owner's Equity account not found"); return; }
+              const currentBalance = balances[account.id] || 0;
+              const delta = targetBalance - currentBalance;
+              if (delta === 0) { showToast("Balance already matches"); return; }
+              const side = normalSideFor(account.type);
+              const lines = side === "debit"
+                ? (delta > 0
+                  ? [{ accountId: account.id, debit: delta, credit: 0 }, { accountId: equityAccount.id, debit: 0, credit: delta }]
+                  : [{ accountId: equityAccount.id, debit: -delta, credit: 0 }, { accountId: account.id, debit: 0, credit: -delta }])
+                : (delta > 0
+                  ? [{ accountId: equityAccount.id, debit: delta, credit: 0 }, { accountId: account.id, debit: 0, credit: delta }]
+                  : [{ accountId: account.id, debit: -delta, credit: 0 }, { accountId: equityAccount.id, debit: 0, credit: -delta }]);
+              const je = {
+                id: uid("je"), date: date || todayStr(), memo: note || `Balance adjustment — ${account.name}`,
+                lines, createdBy: currentUser.name, source: "balance-adjustment",
+              };
+              await persistJournal([je, ...journal]);
+              showToast("Balance updated");
+            }}
+            onTransfer={async (fromId, toId, amount, date, note) => {
+              const je = {
+                id: uid("je"), date: date || todayStr(), memo: note || "Account transfer",
+                lines: [{ accountId: toId, debit: amount, credit: 0 }, { accountId: fromId, debit: 0, credit: amount }],
+                createdBy: currentUser.name, source: "transfer",
+              };
+              await persistJournal([je, ...journal]);
+              showToast("Transfer recorded");
+            }}
           />
         )}
 
@@ -1667,9 +1698,15 @@ function Expenses({ accounts, expenses, currentUser, onAdd, onDelete }) {
    Chart of Accounts
 --------------------------------------------------------- */
 
-function ChartOfAccounts({ accounts, balances, currentUser, onAdd, onAddMany, onDelete }) {
+function ChartOfAccounts({ accounts, balances, currentUser, onAdd, onAddMany, onEdit, onDelete, onAdjustBalance, onTransfer }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ code: "", name: "", type: "asset" });
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({ code: "", name: "" });
+  const [balancingId, setBalancingId] = useState(null);
+  const [balanceForm, setBalanceForm] = useState({ amount: "", date: todayStr(), note: "" });
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [transferForm, setTransferForm] = useState({ from: "", to: "", amount: "", date: todayStr(), note: "" });
   const isAdmin = currentUser.role === "admin";
   const grouped = ACCOUNT_TYPES.map((t) => ({ ...t, items: accounts.filter((a) => a.type === t.key) }));
 
@@ -1697,25 +1734,82 @@ function ChartOfAccounts({ accounts, balances, currentUser, onAdd, onAddMany, on
     setOpen(false);
   };
 
+  const startEdit = (a) => { setEditingId(a.id); setEditForm({ code: a.code, name: a.name }); setBalancingId(null); };
+  const saveEdit = (id) => {
+    if (!editForm.code.trim() || !editForm.name.trim()) return;
+    onEdit(id, { code: editForm.code.trim(), name: editForm.name.trim() });
+    setEditingId(null);
+  };
+
+  const startBalance = (a) => { setBalancingId(a.id); setBalanceForm({ amount: String(balances[a.id] || 0), date: todayStr(), note: "" }); setEditingId(null); };
+  const saveBalance = (a) => {
+    const amt = Number(balanceForm.amount);
+    if (isNaN(amt)) return;
+    onAdjustBalance(a, amt, balanceForm.date, balanceForm.note);
+    setBalancingId(null);
+  };
+
+  const submitTransfer = (e) => {
+    e.preventDefault();
+    const amt = Number(transferForm.amount);
+    if (!transferForm.from || !transferForm.to || transferForm.from === transferForm.to || !(amt > 0)) return;
+    onTransfer(transferForm.from, transferForm.to, amt, transferForm.date, transferForm.note);
+    setTransferForm({ from: "", to: "", amount: "", date: todayStr(), note: "" });
+    setTransferOpen(false);
+  };
+
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
-        <PageHeader title="Chart of Accounts" subtitle="All accounts in the business and their balances" />
+        <PageHeader title="Chart of Accounts" subtitle="All accounts, balances, opening balances, and transfers" />
         {isAdmin && (
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             {missingCategories.length > 0 && (
               <GhostButton onClick={addStandardCategories}>+ Add {missingCategories.length} Standard Categories</GhostButton>
             )}
-            <PrimaryButton onClick={() => setOpen((v) => !v)}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Account"}</PrimaryButton>
+            <label className="pin-btn" onClick={() => { setTransferOpen((v) => !v); setOpen(false); }} style={{
+              display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.08)", color: PALETTE.ink,
+              padding: "10px 16px", borderRadius: 999, fontSize: 13.5, fontWeight: 600, border: `1px solid ${PALETTE.line}`, cursor: "pointer",
+            }}>
+              <Wallet size={15} /> Transfer Funds
+            </label>
+            <PrimaryButton onClick={() => { setOpen((v) => !v); setTransferOpen(false); }}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Account"}</PrimaryButton>
           </div>
         )}
       </div>
+
+      {transferOpen && (
+        <Card style={{ marginBottom: 20 }}>
+          <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Transfer Between Accounts</div>
+          <p style={{ fontSize: 12.5, color: PALETTE.inkSoft, marginTop: 0, marginBottom: 14 }}>Move money from one account to another — e.g. Cash to Bank, or Bank to bKash.</p>
+          <form onSubmit={submitTransfer} className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 140px", gap: 10 }}>
+            <div>
+              <label style={labelStyle}>From</label>
+              <select style={inputStyle} value={transferForm.from} onChange={(e) => setTransferForm({ ...transferForm, from: e.target.value })}>
+                <option value="">Select account</option>
+                {accounts.map((a) => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={labelStyle}>To</label>
+              <select style={inputStyle} value={transferForm.to} onChange={(e) => setTransferForm({ ...transferForm, to: e.target.value })}>
+                <option value="">Select account</option>
+                {accounts.map((a) => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
+              </select>
+            </div>
+            <div><label style={labelStyle}>Amount (BDT)</label><input style={inputStyle} type="number" value={transferForm.amount} onChange={(e) => setTransferForm({ ...transferForm, amount: e.target.value })} placeholder="0" /></div>
+            <div><label style={labelStyle}>Date</label><input style={inputStyle} type="date" value={transferForm.date} onChange={(e) => setTransferForm({ ...transferForm, date: e.target.value })} /></div>
+            <div style={{ gridColumn: "span 2" }}><label style={labelStyle}>Note (optional)</label><input style={inputStyle} value={transferForm.note} onChange={(e) => setTransferForm({ ...transferForm, note: e.target.value })} placeholder="e.g. Weekly cash deposit" /></div>
+            <div style={{ display: "flex", alignItems: "end" }}><PrimaryButton type="submit" style={{ width: "100%", justifyContent: "center" }}>Transfer</PrimaryButton></div>
+          </form>
+        </Card>
+      )}
 
       {open && (
         <Card style={{ marginBottom: 20 }}>
           <form onSubmit={submit} className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "100px 1fr 160px auto", gap: 10, alignItems: "end" }}>
             <div><label style={labelStyle}>Code</label><input style={inputStyle} value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="6000" /></div>
-            <div><label style={labelStyle}>Name</label><input style={inputStyle} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Account name" /></div>
+            <div><label style={labelStyle}>Name</label><input style={inputStyle} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Account name (e.g. a new Income category)" /></div>
             <div><label style={labelStyle}>Type</label><select style={inputStyle} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>{ACCOUNT_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}</select></div>
             <PrimaryButton type="submit">Add</PrimaryButton>
           </form>
@@ -1727,17 +1821,44 @@ function ChartOfAccounts({ accounts, balances, currentUser, onAdd, onAddMany, on
           <Card key={g.key}>
             <div style={{ fontFamily: FONT.display, fontSize: 15, marginBottom: 10, fontWeight: 600 }}>{g.label}</div>
             {g.items.length === 0 ? <EmptyState text="No accounts yet" /> : (
-              <div style={{ overflowX: "auto" }}><table style={{ minWidth: 560 }}>
-                <thead><tr style={{ borderBottom: `1px solid ${PALETTE.line}` }}><Th>Code</Th><Th>Name</Th><Th align="right">Balance</Th>{isAdmin && <Th align="right"> </Th>}</tr></thead>
-                <tbody>
-                  {g.items.map((a) => (
-                    <tr key={a.id} className="row-hover" style={{ borderBottom: `1px solid ${PALETTE.line}` }}>
-                      <Td mono>{a.code}</Td><Td>{a.name}</Td><Td align="right" mono>{fmtMoney(balances[a.id] || 0)}</Td>
-                      {isAdmin && <Td align="right"><button className="pin-btn" onClick={() => onDelete(a.id)} style={{ background: "transparent", color: PALETTE.debit }}><Trash2 size={14} /></button></Td>}
-                    </tr>
-                  ))}
-                </tbody>
-              </table></div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {g.items.map((a) => (
+                  <div key={a.id} style={{ borderBottom: `1px solid ${PALETTE.line}`, padding: "8px 0" }}>
+                    {editingId === a.id ? (
+                      <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                        <input style={{ ...inputStyle, width: 70, padding: "6px 8px" }} value={editForm.code} onChange={(e) => setEditForm({ ...editForm, code: e.target.value })} />
+                        <input style={{ ...inputStyle, flex: 1, minWidth: 100, padding: "6px 8px" }} value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+                        <button className="pin-btn" onClick={() => saveEdit(a.id)} style={{ background: PALETTE.credit, color: "#fff", fontSize: 12, padding: "5px 10px", borderRadius: 999 }}>Save</button>
+                        <button className="pin-btn" onClick={() => setEditingId(null)} style={{ background: "transparent", color: PALETTE.inkSoft, fontSize: 12 }}>Cancel</button>
+                      </div>
+                    ) : balancingId === a.id ? (
+                      <div>
+                        <div style={{ fontSize: 12.5, marginBottom: 6, color: PALETTE.inkSoft }}>Set balance for <b style={{ color: PALETTE.ink }}>{a.name}</b></div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                          <input style={{ ...inputStyle, width: 110, padding: "6px 8px" }} type="number" value={balanceForm.amount} onChange={(e) => setBalanceForm({ ...balanceForm, amount: e.target.value })} placeholder="Amount" />
+                          <input style={{ ...inputStyle, width: 140, padding: "6px 8px" }} type="date" value={balanceForm.date} onChange={(e) => setBalanceForm({ ...balanceForm, date: e.target.value })} />
+                          <input style={{ ...inputStyle, flex: 1, minWidth: 100, padding: "6px 8px" }} value={balanceForm.note} onChange={(e) => setBalanceForm({ ...balanceForm, note: e.target.value })} placeholder="Note (optional)" />
+                          <button className="pin-btn" onClick={() => saveBalance(a)} style={{ background: PALETTE.credit, color: "#fff", fontSize: 12, padding: "5px 10px", borderRadius: 999 }}>Save</button>
+                          <button className="pin-btn" onClick={() => setBalancingId(null)} style={{ background: "transparent", color: PALETTE.inkSoft, fontSize: 12 }}>Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontFamily: FONT.mono, fontSize: 12.5, color: PALETTE.inkSoft, width: 46 }}>{a.code}</span>
+                        <span style={{ flex: 1, fontSize: 13.5 }}>{a.name}</span>
+                        <span style={{ fontFamily: FONT.mono, fontSize: 13.5, marginRight: 4 }}>{fmtMoney(balances[a.id] || 0)}</span>
+                        {isAdmin && (
+                          <div style={{ display: "flex", gap: 2 }}>
+                            <button className="pin-btn" onClick={() => startBalance(a)} title="Set balance" style={{ background: "transparent", color: PALETTE.inkSoft, padding: 5 }}><Wallet size={13} /></button>
+                            <button className="pin-btn" onClick={() => startEdit(a)} title="Rename" style={{ background: "transparent", color: PALETTE.inkSoft, padding: 5 }}><Edit2 size={13} /></button>
+                            <button className="pin-btn" onClick={() => onDelete(a.id)} title="Delete" style={{ background: "transparent", color: PALETTE.debit, padding: 5 }}><Trash2 size={13} /></button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             )}
           </Card>
         ))}
