@@ -42,6 +42,7 @@ const STANDARD_EXPENSE_CATEGORIES = [
 ];
 
 const PAYMENT_METHODS = ["Cash", "Bank Transfer", "Mobile Banking (bKash/Nagad/Rocket)", "Card", "Cheque", "Other"];
+const MEDIA_OPTIONS = ["Facebook", "Instagram", "TikTok", "WhatsApp", "Website", "Walk-in", "Other"];
 const PRODUCT_COLORS = ["#F4A896", "#8FBFA3", "#F2C078", "#9FB8DD", "#D9A6C2", "#B7C4A8", "#E9A178", "#A9C9D9"];
 
 function uid(prefix = "id") {
@@ -62,113 +63,144 @@ function normalSideFor(type) {
 function generateInvoicePDF(invoice) {
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
   const marginX = 48;
   let y = 56;
 
+  // Full-page dark maroon background to match the on-screen theme
+  doc.setFillColor(43, 7, 13);
+  doc.rect(0, 0, pageWidth, pageHeight, "F");
+  const INK = [245, 237, 238];
+  const INK_SOFT = [200, 175, 178];
+  const ACCENT = [226, 76, 99];
+  const LINE = [90, 45, 52];
+  const ROW_ALT = [58, 18, 25];
+
   doc.setFont("helvetica", "bold");
   doc.setFontSize(20);
+  doc.setTextColor(...INK);
   doc.text("Two Threads", marginX, y);
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  doc.setTextColor(120);
-  doc.text("Accounting & Invoicing", marginX, y + 16);
-  doc.setTextColor(20);
+  doc.setFontSize(9.5);
+  doc.setTextColor(...INK_SOFT);
+  doc.text("CRAFTED ELEGANCE, MADE YOURS", marginX, y + 16);
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
+  doc.setFontSize(15);
+  doc.setTextColor(...ACCENT);
   doc.text("INVOICE", pageWidth - marginX, y, { align: "right" });
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  doc.text(invoice.number, pageWidth - marginX, y + 16, { align: "right" });
-  doc.text(`Date: ${invoice.date}`, pageWidth - marginX, y + 30, { align: "right" });
-  if (invoice.dueDate) doc.text(`Due: ${invoice.dueDate}`, pageWidth - marginX, y + 44, { align: "right" });
-
-  y += 70;
-  doc.setDrawColor(220);
-  doc.line(marginX, y, pageWidth - marginX, y);
-  y += 24;
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.text("Bill To", marginX, y);
-  y += 16;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10.5);
-  doc.text(invoice.customer || "-", marginX, y);
-  if (invoice.phone) { y += 14; doc.text(invoice.phone, marginX, y); }
-  if (invoice.address) { y += 14; doc.text(invoice.address, marginX, y, { maxWidth: 260 }); }
-  if (invoice.salesBy) { y += 14; doc.setTextColor(120); doc.text(`Sales by: ${invoice.salesBy}`, marginX, y); doc.setTextColor(20); }
-
-  y += 30;
-  doc.setFillColor(92, 17, 25);
-  doc.rect(marginX, y, pageWidth - marginX * 2, 22, "F");
-  doc.setTextColor(255);
-  doc.setFont("helvetica", "bold");
   doc.setFontSize(9.5);
-  doc.text("DESCRIPTION", marginX + 8, y + 15);
-  doc.text("QTY", pageWidth - marginX - 190, y + 15, { align: "right" });
-  doc.text("RATE", pageWidth - marginX - 100, y + 15, { align: "right" });
-  doc.text("AMOUNT", pageWidth - marginX - 8, y + 15, { align: "right" });
-  y += 22;
-  doc.setTextColor(20);
+  doc.setTextColor(...INK_SOFT);
+  doc.text(`Invoice No: ${invoice.number}`, pageWidth - marginX, y + 18, { align: "right" });
+  if (invoice.media) doc.text(`Media: ${invoice.media}`, pageWidth - marginX, y + 32, { align: "right" });
+  doc.text(`Date: ${invoice.date || "-"}`, pageWidth - marginX, y + 46, { align: "right" });
+  if (invoice.dueDate) doc.text(`Due: ${invoice.dueDate}`, pageWidth - marginX, y + 60, { align: "right" });
+
+  y += 84;
+  doc.setDrawColor(...LINE);
+  doc.line(marginX, y, pageWidth - marginX, y);
+  y += 26;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10.5);
+  doc.setTextColor(...INK_SOFT);
+  doc.text("BILL TO", marginX, y);
+  y += 16;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11.5);
+  doc.setTextColor(...INK);
+  doc.text(invoice.customer || "-", marginX, y);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
+  doc.setTextColor(...INK_SOFT);
+  if (invoice.phone) { y += 15; doc.text(invoice.phone, marginX, y); }
+  if (invoice.address) { y += 15; doc.text(invoice.address, marginX, y, { maxWidth: 260 }); }
+  if (invoice.salesBy) { y += 15; doc.text(`Sales by: ${invoice.salesBy}`, marginX, y); }
 
+  y += 32;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(...INK_SOFT);
+  doc.text("PRODUCT", marginX, y);
+  doc.text("QTY", pageWidth - marginX - 190, y, { align: "right" });
+  doc.text("RATE", pageWidth - marginX - 100, y, { align: "right" });
+  doc.text("AMOUNT", pageWidth - marginX - 8, y, { align: "right" });
+  y += 8;
+  doc.setDrawColor(...LINE);
+  doc.line(marginX, y, pageWidth - marginX, y);
+  y += 4;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
   (invoice.items || []).forEach((it, idx) => {
     const rowY = y + 18;
     if (idx % 2 === 1) {
-      doc.setFillColor(248, 248, 248);
-      doc.rect(marginX, y, pageWidth - marginX * 2, 22, "F");
+      doc.setFillColor(...ROW_ALT);
+      doc.rect(marginX, y, pageWidth - marginX * 2, 24, "F");
     }
-    doc.text(String(it.desc || ""), marginX + 8, rowY - 3, { maxWidth: pageWidth - marginX * 2 - 220 });
+    doc.setTextColor(...INK);
+    doc.text(String(it.desc || ""), marginX, rowY - 3, { maxWidth: pageWidth - marginX * 2 - 220 });
     doc.text(String(it.qty), pageWidth - marginX - 190, rowY - 3, { align: "right" });
     doc.text(fmtMoney(it.rate), pageWidth - marginX - 100, rowY - 3, { align: "right" });
     doc.text(fmtMoney((Number(it.qty) || 0) * (Number(it.rate) || 0)), pageWidth - marginX - 8, rowY - 3, { align: "right" });
-    y += 22;
+    y += 24;
   });
 
-  y += 8;
-  doc.setDrawColor(220);
+  y += 6;
+  doc.setDrawColor(...LINE);
   doc.line(marginX, y, pageWidth - marginX, y);
-  y += 20;
+  y += 22;
 
   const paidTotal = (invoice.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
   const balanceDue = invoice.total - paidTotal;
 
   const summaryX = pageWidth - marginX - 200;
   doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(...INK_SOFT);
   doc.text("Subtotal", summaryX, y);
-  doc.text(fmtMoney(invoice.total), pageWidth - marginX - 8, y, { align: "right" });
-  y += 16;
+  doc.setTextColor(...INK);
+  doc.text(fmtMoney(invoice.total), pageWidth - marginX, y, { align: "right" });
+  y += 17;
   if (paidTotal > 0) {
+    doc.setTextColor(...INK_SOFT);
     doc.text("Paid", summaryX, y);
-    doc.text(fmtMoney(paidTotal), pageWidth - marginX - 8, y, { align: "right" });
-    y += 16;
+    doc.setTextColor(...INK);
+    doc.text(fmtMoney(paidTotal), pageWidth - marginX, y, { align: "right" });
+    y += 17;
   }
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(11.5);
+  doc.setFontSize(13);
+  doc.setTextColor(...ACCENT);
   doc.text("Balance Due", summaryX, y);
-  doc.text(fmtMoney(balanceDue), pageWidth - marginX - 8, y, { align: "right" });
-  y += 30;
+  doc.text(fmtMoney(balanceDue), pageWidth - marginX, y, { align: "right" });
+  y += 34;
 
   if ((invoice.payments || []).length > 0) {
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.text("Payment History", marginX, y);
-    y += 14;
+    doc.setFontSize(9.5);
+    doc.setTextColor(...INK_SOFT);
+    doc.text("PAYMENT HISTORY", marginX, y);
+    y += 15;
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9.5);
-    doc.setTextColor(90);
     invoice.payments.forEach((p) => {
       doc.text(`${p.date} — ${fmtMoney(p.amount)} (${p.method || "Payment"})`, marginX, y);
       y += 13;
     });
-    doc.setTextColor(20);
   }
 
+  doc.setDrawColor(...LINE);
+  doc.line(marginX, pageHeight - 56, pageWidth - marginX, pageHeight - 56);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(...INK);
+  doc.text("Two Threads", marginX, pageHeight - 36);
+  doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
-  doc.setTextColor(150);
-  doc.text("Thank you for your business — Two Threads", marginX, doc.internal.pageSize.getHeight() - 36);
+  doc.setTextColor(...INK_SOFT);
+  doc.text("Thank you for your order", pageWidth - marginX, pageHeight - 36, { align: "right" });
 
   doc.save(`${invoice.number}.pdf`);
 }
@@ -242,7 +274,9 @@ function GlobalStyles() {
     <style>{`
       @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
       * { box-sizing: border-box; }
+      html, body { overflow-x: hidden; width: 100%; }
       html { background: ${PALETTE.bg}; }
+      #root { min-height: 100vh; width: 100%; }
       body {
         margin: 0;
         min-height: 100vh;
@@ -287,7 +321,7 @@ function GlobalStyles() {
         .sidebar-overlay.open {
           display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 150;
         }
-        .app-main { padding: 18px 16px !important; }
+        .app-main { padding: 18px 16px !important; width: 100%; max-width: 100vw; box-sizing: border-box; }
         .responsive-grid { grid-template-columns: 1fr !important; }
         .responsive-form-row { grid-template-columns: 1fr !important; }
         table { min-width: 560px; }
@@ -348,8 +382,8 @@ function GhostButton({ children, onClick, style }) {
 function Th({ children, align }) {
   return <th style={{ textAlign: align || "left", padding: "8px 10px", fontSize: 11, color: PALETTE.inkSoft, fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase" }}>{children}</th>;
 }
-function Td({ children, align, mono }) {
-  return <td style={{ textAlign: align || "left", padding: "11px 10px", fontSize: 13.5, fontFamily: mono ? FONT.mono : FONT.body, color: PALETTE.ink }}>{children}</td>;
+function Td({ children, align, mono, ...rest }) {
+  return <td {...rest} style={{ textAlign: align || "left", padding: "11px 10px", fontSize: 13.5, fontFamily: mono ? FONT.mono : FONT.body, color: PALETTE.ink, ...(rest.style || {}) }}>{children}</td>;
 }
 function EmptyState({ text }) {
   return <div style={{ padding: "30px 10px", textAlign: "center", color: PALETTE.inkSoft, fontSize: 13.5 }}>{text}</div>;
@@ -602,6 +636,35 @@ export default function App() {
               await persistInvoices([newInvoice, ...invoices]);
               showToast("Invoice created");
             }}
+            onEdit={async (invoiceId, updatedInvoice, journalEntry, oldQtyChanges, newQtyChanges) => {
+              const oldInvoice = invoices.find((i) => i.id === invoiceId);
+              let nextProducts = products;
+              if (oldQtyChanges.length) {
+                nextProducts = nextProducts.map((p) => {
+                  const chg = oldQtyChanges.find((c) => c.productId === p.id);
+                  if (!chg) return p;
+                  return { ...p, qty: (Number(p.qty) || 0) + chg.qty };
+                });
+              }
+              if (newQtyChanges.length) {
+                nextProducts = nextProducts.map((p) => {
+                  const chg = newQtyChanges.find((c) => c.productId === p.id);
+                  if (!chg) return p;
+                  return { ...p, qty: (Number(p.qty) || 0) - chg.qty };
+                });
+              }
+              if (oldQtyChanges.length || newQtyChanges.length) await persistProducts(nextProducts);
+
+              const je = { ...journalEntry, id: uid("je"), createdBy: currentUser.name };
+              const nextJournal = oldInvoice ? journal.filter((j) => j.id !== oldInvoice.journalId) : journal;
+              await persistJournal([je, ...nextJournal]);
+
+              const paidTotal = (oldInvoice?.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+              const status = paidTotal <= 0 ? "unpaid" : paidTotal >= updatedInvoice.total ? "paid" : "partial";
+
+              await persistInvoices(invoices.map((i) => (i.id === invoiceId ? { ...i, ...updatedInvoice, journalId: je.id, status } : i)));
+              showToast("Invoice updated");
+            }}
             onRecordPayment={async (invoice, amount, accountId, method) => {
               const je = {
                 id: uid("je"), date: todayStr(), memo: `Payment received — Invoice ${invoice.number} (${method})`,
@@ -649,10 +712,28 @@ export default function App() {
               await persistExpenses([{ ...expense, id: uid("exp"), journalId: je.id, createdBy: currentUser.name }, ...expenses]);
               showToast("Expense added");
             }}
+            onEdit={async (expenseId, updatedExpense, journalEntry) => {
+              const old = expenses.find((e) => e.id === expenseId);
+              const je = { ...journalEntry, id: uid("je"), createdBy: currentUser.name };
+              const nextJournal = old ? journal.filter((j) => j.id !== old.journalId) : journal;
+              await persistJournal([je, ...nextJournal]);
+              await persistExpenses(expenses.map((e) => (e.id === expenseId ? { ...e, ...updatedExpense, journalId: je.id } : e)));
+              showToast("Expense updated");
+            }}
             onDelete={async (expense) => {
               await persistExpenses(expenses.filter((e) => e.id !== expense.id));
               await persistJournal(journal.filter((j) => j.id !== expense.journalId));
               showToast("Expense deleted");
+            }}
+            onBulkImport={async ({ newExpenses, newJournalEntries, newAccounts }) => {
+              let baseAccounts = accounts;
+              if (newAccounts.length) {
+                baseAccounts = [...accounts, ...newAccounts];
+                await persistAccounts(baseAccounts);
+              }
+              await persistJournal([...newJournalEntries, ...journal]);
+              await persistExpenses([...newExpenses, ...expenses]);
+              showToast(`${newExpenses.length} expenses imported`);
             }}
           />
         )}
@@ -1226,12 +1307,14 @@ function Bills({ accounts, products, bills, currentUser, onAdd, onMarkPaid, onDe
    Invoices — items can link to inventory products
 --------------------------------------------------------- */
 
-function Invoices({ accounts, products, invoices, currentUser, onAdd, onRecordPayment, onDelete, onBulkImport }) {
+function Invoices({ accounts, products, invoices, currentUser, onAdd, onEdit, onRecordPayment, onDelete, onBulkImport }) {
   const [open, setOpen] = useState(false);
+  const [editingInvoice, setEditingInvoice] = useState(null);
   const [customer, setCustomer] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [salesBy, setSalesBy] = useState("");
+  const [media, setMedia] = useState("Facebook");
   const [date, setDate] = useState(todayStr());
   const [dueDate, setDueDate] = useState(todayStr());
   const [items, setItems] = useState([{ productId: "", desc: "", qty: 1, rate: "" }]);
@@ -1265,13 +1348,61 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onRecordPa
     setItems(next);
   };
 
+  const startEditInvoice = (inv) => {
+    setEditingInvoice(inv);
+    setCustomer(inv.customer || ""); setPhone(inv.phone || ""); setAddress(inv.address || "");
+    setSalesBy(inv.salesBy || ""); setMedia(inv.media || "Facebook");
+    setDate(inv.date || todayStr()); setDueDate(inv.dueDate || todayStr());
+    setItems(inv.items && inv.items.length ? inv.items.map((it) => ({ ...it })) : [{ productId: "", desc: "", qty: 1, rate: "" }]);
+    setAdvance(""); setAdvanceAccount("");
+    setOpen(true);
+    setViewingInvoice(null);
+  };
+
+  const cancelForm = () => {
+    setOpen(false);
+    setEditingInvoice(null);
+    setCustomer(""); setPhone(""); setAddress(""); setSalesBy(""); setMedia("Facebook");
+    setItems([{ productId: "", desc: "", qty: 1, rate: "" }]);
+    setAdvance(""); setAdvanceAccount("");
+  };
+
   const submit = (e) => {
     e.preventDefault();
     if (!customer.trim() || total <= 0 || !arAccount || !incomeAccount) return;
-    const number = `INV-${String(invoices.length + 1).padStart(4, "0")}`;
     const cleanItems = items.filter((it) => it.desc.trim() && (Number(it.qty) || 0) > 0);
+
+    if (editingInvoice) {
+      const lines = [{ accountId: arAccount.id, debit: total, credit: 0 }, { accountId: incomeAccount.id, debit: 0, credit: total }];
+      const oldQtyChanges = (editingInvoice.items || []).filter((it) => it.productId).map((it) => ({ productId: it.productId, qty: Number(it.qty) || 0 }));
+      const newQtyChanges = [];
+      let totalCogs = 0;
+      cleanItems.forEach((it) => {
+        if (it.productId) {
+          const p = products.find((pr) => pr.id === it.productId);
+          if (p) {
+            totalCogs += (Number(it.qty) || 0) * (Number(p.costPrice) || 0);
+            newQtyChanges.push({ productId: it.productId, qty: Number(it.qty) || 0 });
+          }
+        }
+      });
+      if (totalCogs > 0 && inventoryAccount && cogsAccount) {
+        lines.push({ accountId: cogsAccount.id, debit: totalCogs, credit: 0 });
+        lines.push({ accountId: inventoryAccount.id, debit: 0, credit: totalCogs });
+      }
+      const journalEntry = { date, memo: `Invoice ${editingInvoice.number} — ${customer.trim()}`, lines, source: "invoice" };
+      const updatedInvoice = {
+        customer: customer.trim(), phone: phone.trim(), address: address.trim(), salesBy: salesBy.trim(), media,
+        date, dueDate, items: cleanItems, total,
+      };
+      onEdit(editingInvoice.id, updatedInvoice, journalEntry, oldQtyChanges, newQtyChanges);
+      cancelForm();
+      return;
+    }
+
+    const number = `INV-${String(invoices.length + 1).padStart(4, "0")}`;
     const invoice = {
-      number, customer: customer.trim(), phone: phone.trim(), address: address.trim(), salesBy: salesBy.trim(),
+      number, customer: customer.trim(), phone: phone.trim(), address: address.trim(), salesBy: salesBy.trim(), media,
       date, dueDate, items: cleanItems, total, payments: [], status: "unpaid",
     };
 
@@ -1294,8 +1425,7 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onRecordPa
 
     const journalEntry = { date, memo: `Invoice ${number} — ${customer.trim()}`, lines, source: "invoice" };
     onAdd(invoice, journalEntry, qtyChanges, Number(advance) > 0 ? { amount: Number(advance), accountId: advanceAccount, method: advanceMethod } : null);
-    setCustomer(""); setPhone(""); setAddress(""); setSalesBy(""); setItems([{ productId: "", desc: "", qty: 1, rate: "" }]);
-    setAdvance(""); setAdvanceAccount(""); setOpen(false);
+    cancelForm();
   };
 
   const pick = (row, keys) => {
@@ -1423,7 +1553,7 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onRecordPa
               <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} style={{ display: "none" }} />
             </label>
           )}
-          <PrimaryButton onClick={() => setOpen((v) => !v)}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Invoice"}</PrimaryButton>
+          <PrimaryButton onClick={() => (open ? cancelForm() : setOpen(true))}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Invoice"}</PrimaryButton>
         </div>
       </div>
 
@@ -1435,6 +1565,7 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onRecordPa
 
       {open && (
         <Card style={{ marginBottom: 20 }}>
+          <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, marginBottom: 12 }}>{editingInvoice ? `Editing ${editingInvoice.number}` : "New Invoice"}</div>
           <form onSubmit={submit}>
             <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <div><label style={labelStyle}>Customer Name</label><input style={inputStyle} value={customer} onChange={(e) => setCustomer(e.target.value)} placeholder="Customer name" /></div>
@@ -1445,7 +1576,7 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onRecordPa
               <div><label style={labelStyle}>Sales By (optional)</label><input style={inputStyle} value={salesBy} onChange={(e) => setSalesBy(e.target.value)} placeholder="Staff name" /></div>
             </div>
             <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 160px 160px", gap: 10, marginTop: 10 }}>
-              <div />
+              <div><label style={labelStyle}>Media</label><select style={inputStyle} value={media} onChange={(e) => setMedia(e.target.value)}>{MEDIA_OPTIONS.map((m) => <option key={m} value={m}>{m}</option>)}</select></div>
               <div><label style={labelStyle}>Date</label><input type="date" style={inputStyle} value={date} onChange={(e) => setDate(e.target.value)} /></div>
               <div><label style={labelStyle}>Due Date</label><input type="date" style={inputStyle} value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></div>
             </div>
@@ -1476,15 +1607,17 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onRecordPa
               <GhostButton onClick={() => setItems([...items, { productId: "", desc: "", qty: 1, rate: "" }])}>+ Add another item</GhostButton>
             </div>
 
-            <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "160px 1fr 1fr", gap: 10, marginTop: 14 }}>
-              <div><label style={labelStyle}>Advance Received (optional)</label><input style={inputStyle} type="number" value={advance} onChange={(e) => setAdvance(e.target.value)} placeholder="0" /></div>
-              <div><label style={labelStyle}>Advance Method</label><select style={inputStyle} value={advanceMethod} onChange={(e) => setAdvanceMethod(e.target.value)}>{PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}</select></div>
-              <div><label style={labelStyle}>Deposit To</label><select style={inputStyle} value={advanceAccount} onChange={(e) => setAdvanceAccount(e.target.value)}><option value="">Select</option>{cashAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
-            </div>
+            {!editingInvoice && (
+              <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "160px 1fr 1fr", gap: 10, marginTop: 14 }}>
+                <div><label style={labelStyle}>Advance Received (optional)</label><input style={inputStyle} type="number" value={advance} onChange={(e) => setAdvance(e.target.value)} placeholder="0" /></div>
+                <div><label style={labelStyle}>Advance Method</label><select style={inputStyle} value={advanceMethod} onChange={(e) => setAdvanceMethod(e.target.value)}>{PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}</select></div>
+                <div><label style={labelStyle}>Deposit To</label><select style={inputStyle} value={advanceAccount} onChange={(e) => setAdvanceAccount(e.target.value)}><option value="">Select</option>{cashAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+              </div>
+            )}
 
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16 }}>
               <div style={{ fontFamily: FONT.mono, fontSize: 16 }}>Total: {fmtMoney(total)}</div>
-              <PrimaryButton type="submit">Create Invoice</PrimaryButton>
+              <PrimaryButton type="submit">{editingInvoice ? "Save Changes" : "Create Invoice"}</PrimaryButton>
             </div>
           </form>
         </Card>
@@ -1532,7 +1665,12 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onRecordPa
                             <GhostButton onClick={() => { setPayFor(inv.id); setPayAmount(String(balanceDue > 0 ? balanceDue : "")); }}>Record Payment</GhostButton>
                           )
                         )}
-                        {currentUser.role === "admin" && <button className="pin-btn" onClick={() => onDelete(inv)} style={{ background: "transparent", color: PALETTE.debit }}><Trash2 size={14} /></button>}
+                        {currentUser.role === "admin" && (
+                          <>
+                            <button className="pin-btn" onClick={() => startEditInvoice(inv)} style={{ background: "transparent", color: PALETTE.inkSoft }}><Edit2 size={14} /></button>
+                            <button className="pin-btn" onClick={() => onDelete(inv)} style={{ background: "transparent", color: PALETTE.debit }}><Trash2 size={14} /></button>
+                          </>
+                        )}
                       </div>
                     </Td>
                   </tr>
@@ -1543,12 +1681,12 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onRecordPa
         )}
       </Card>
 
-      {viewingInvoice && <InvoiceDetailModal invoice={viewingInvoice} onClose={() => setViewingInvoice(null)} />}
+      {viewingInvoice && <InvoiceDetailModal invoice={viewingInvoice} onClose={() => setViewingInvoice(null)} onEdit={currentUser.role === "admin" ? () => startEditInvoice(viewingInvoice) : null} />}
     </div>
   );
 }
 
-function InvoiceDetailModal({ invoice, onClose }) {
+function InvoiceDetailModal({ invoice, onClose, onEdit }) {
   const paidTotal = (invoice.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
   const balanceDue = invoice.total - paidTotal;
   const statusTone = invoice.status === "paid" ? "good" : invoice.status === "partial" ? "neutral" : "bad";
@@ -1562,7 +1700,10 @@ function InvoiceDetailModal({ invoice, onClose }) {
             <div style={{ fontFamily: FONT.display, fontSize: 20, fontWeight: 600 }}>{invoice.number}</div>
             <div style={{ fontSize: 12.5, color: PALETTE.inkSoft, marginTop: 2 }}>{invoice.date}{invoice.dueDate && invoice.dueDate !== invoice.date ? ` · Due ${invoice.dueDate}` : ""}</div>
           </div>
-          <button className="pin-btn" onClick={onClose} style={{ background: PALETTE.chip, padding: 8, borderRadius: 999 }}><X size={16} /></button>
+          <div style={{ display: "flex", gap: 8 }}>
+            {onEdit && <button className="pin-btn" onClick={onEdit} style={{ background: PALETTE.chip, padding: 8, borderRadius: 999 }}><Edit2 size={16} /></button>}
+            <button className="pin-btn" onClick={onClose} style={{ background: PALETTE.chip, padding: 8, borderRadius: 999 }}><X size={16} /></button>
+          </div>
         </div>
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18, flexWrap: "wrap", gap: 10 }}>
@@ -1572,6 +1713,7 @@ function InvoiceDetailModal({ invoice, onClose }) {
             {invoice.phone && <div style={{ fontSize: 12.5, color: PALETTE.inkSoft }}>{invoice.phone}</div>}
             {invoice.address && <div style={{ fontSize: 12.5, color: PALETTE.inkSoft }}>{invoice.address}</div>}
             {invoice.salesBy && <div style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 4 }}>Sales by {invoice.salesBy}</div>}
+            {invoice.media && <div style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 2 }}>Media: {invoice.media}</div>}
           </div>
           <Badge tone={statusTone}>{statusLabel}</Badge>
         </div>
@@ -1622,7 +1764,7 @@ function InvoiceDetailModal({ invoice, onClose }) {
    Expenses
 --------------------------------------------------------- */
 
-function Expenses({ accounts, expenses, currentUser, onAdd, onDelete }) {
+function Expenses({ accounts, expenses, currentUser, onAdd, onEdit, onDelete, onBulkImport }) {
   const [open, setOpen] = useState(false);
   const [date, setDate] = useState(todayStr());
   const [vendor, setVendor] = useState("");
@@ -1630,6 +1772,10 @@ function Expenses({ accounts, expenses, currentUser, onAdd, onDelete }) {
   const [paymentAccountId, setPaymentAccountId] = useState("");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState("");
 
   const expenseAccounts = accounts.filter((a) => a.type === "expense" && a.name !== "Cost of Goods Sold");
   const cashAccounts = accounts.filter((a) => a.type === "asset" && a.name !== "Accounts Receivable" && a.name !== "Inventory");
@@ -1637,26 +1783,159 @@ function Expenses({ accounts, expenses, currentUser, onAdd, onDelete }) {
   const submit = (e) => {
     e.preventDefault();
     const amt = Number(amount);
-    if (!vendor.trim() || !accountId || !paymentAccountId || !(amt > 0)) return;
-    const expense = { date, vendor: vendor.trim(), accountId, paymentAccountId, amount: amt, note: note.trim() };
-    const journalEntry = { date, memo: `Expense — ${vendor.trim()}`, lines: [{ accountId, debit: amt, credit: 0 }, { accountId: paymentAccountId, debit: 0, credit: amt }], source: "expense" };
+    if (!accountId || !paymentAccountId || !(amt > 0)) return;
+    const categoryName = expenseAccounts.find((a) => a.id === accountId)?.name || "Expense";
+    const vendorLabel = vendor.trim() || categoryName;
+    const expense = { date, vendor: vendorLabel, accountId, paymentAccountId, amount: amt, note: note.trim() };
+    const journalEntry = { date, memo: `Expense — ${vendorLabel}`, lines: [{ accountId, debit: amt, credit: 0 }, { accountId: paymentAccountId, debit: 0, credit: amt }], source: "expense" };
     onAdd(expense, journalEntry);
     setVendor(""); setAmount(""); setNote(""); setOpen(false);
+  };
+
+  const startEdit = (exp) => {
+    setEditingId(exp.id);
+    setEditForm({ date: exp.date, vendor: exp.vendor, accountId: exp.accountId, paymentAccountId: exp.paymentAccountId, amount: String(exp.amount), note: exp.note || "" });
+  };
+  const saveEdit = (expenseId) => {
+    const amt = Number(editForm.amount);
+    if (!editForm.accountId || !editForm.paymentAccountId || !(amt > 0)) return;
+    const categoryName = expenseAccounts.find((a) => a.id === editForm.accountId)?.name || "Expense";
+    const vendorLabel = editForm.vendor.trim() || categoryName;
+    const updatedExpense = { date: editForm.date, vendor: vendorLabel, accountId: editForm.accountId, paymentAccountId: editForm.paymentAccountId, amount: amt, note: editForm.note.trim() };
+    const journalEntry = { date: editForm.date, memo: `Expense — ${vendorLabel}`, lines: [{ accountId: editForm.accountId, debit: amt, credit: 0 }, { accountId: editForm.paymentAccountId, debit: 0, credit: amt }], source: "expense" };
+    onEdit(expenseId, updatedExpense, journalEntry);
+    setEditingId(null);
+  };
+
+  const pick = (row, keys) => {
+    for (const k of keys) {
+      for (const rk of Object.keys(row)) {
+        if (rk.trim().toLowerCase() === k.toLowerCase()) return row[rk];
+      }
+    }
+    return undefined;
+  };
+  const toDateStr = (v) => {
+    if (!v) return todayStr();
+    if (v instanceof Date) return v.toISOString().slice(0, 10);
+    const d = new Date(v);
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+    return todayStr();
+  };
+
+  const handleFile = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    setImporting(true);
+    setImportMsg("");
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = new Uint8Array(evt.target.result);
+        const wb = XLSX.read(data, { type: "array", cellDates: true });
+        const sheetName = wb.SheetNames.find((n) => n.trim().toLowerCase().includes("expense")) || wb.SheetNames[0];
+        const ws = wb.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
+
+        let workingAccounts = [...accounts];
+        const newAccounts = [];
+        const findOrCreateExpenseAccount = (name) => {
+          const clean = name.trim();
+          let acc = workingAccounts.find((a) => a.type === "expense" && a.name.toLowerCase() === clean.toLowerCase());
+          if (acc) return acc;
+          const existingCodes = workingAccounts.filter((a) => a.type === "expense").map((a) => Number(a.code) || 0);
+          const code = String(Math.max(5000, ...existingCodes, 0) + 10);
+          acc = { id: uid("acc"), code, name: clean, type: "expense" };
+          workingAccounts.push(acc);
+          newAccounts.push(acc);
+          return acc;
+        };
+        const defaultCash = accounts.find((a) => a.name === "Cash in Hand") || cashAccounts[0];
+        const findPaymentAccount = (name) => {
+          if (!name) return defaultCash;
+          const clean = String(name).trim().toLowerCase();
+          const found = workingAccounts.find((a) => a.type === "asset" && a.name.toLowerCase() === clean);
+          return found || defaultCash;
+        };
+
+        const newExpenses = [];
+        const newJournalEntries = [];
+
+        rows.forEach((row) => {
+          const category = String(pick(row, ["Expense Catagory", "Expense Category", "Category"]) || "").trim();
+          const amt = Number(pick(row, ["Expense Amount", "Amount"])) || 0;
+          if (!category || amt <= 0) return;
+          if (category.toLowerCase().includes("opening balace") || category.toLowerCase().includes("opening balance")) return;
+
+          const vendorName = String(pick(row, ["Expense Details", "Vendor", "Details"]) || category).trim();
+          const rowDate = toDateStr(pick(row, ["Date"]));
+          const methodName = pick(row, ["Method", "Paid From"]);
+          const categoryAccount = findOrCreateExpenseAccount(category);
+          const paymentAccount = findPaymentAccount(methodName);
+          if (!paymentAccount) return;
+
+          const expense = {
+            id: uid("exp"), date: rowDate, vendor: vendorName || category,
+            accountId: categoryAccount.id, paymentAccountId: paymentAccount.id,
+            amount: amt, note: "Imported", createdBy: currentUser.name,
+          };
+          const je = {
+            id: uid("je"), date: rowDate, memo: `Expense — ${expense.vendor} (imported)`,
+            lines: [{ accountId: categoryAccount.id, debit: amt, credit: 0 }, { accountId: paymentAccount.id, debit: 0, credit: amt }],
+            createdBy: currentUser.name, source: "expense", refId: expense.id,
+          };
+          expense.journalId = je.id;
+          newExpenses.push(expense);
+          newJournalEntries.push(je);
+        });
+
+        if (newExpenses.length === 0) {
+          setImportMsg('No expense rows found. Make sure the sheet has "Expense Catagory" and "Expense Amount" columns.');
+        } else {
+          const ok = window.confirm(`${newExpenses.length} expenses found${newAccounts.length ? ` (will also create ${newAccounts.length} new categories)` : ""}. Import them?`);
+          if (ok) onBulkImport({ newExpenses, newJournalEntries, newAccounts });
+        }
+      } catch (err) {
+        setImportMsg("Could not read this file. Please check it's a valid .xlsx export.");
+      } finally {
+        setImporting(false);
+        e.target.value = "";
+      }
+    };
+    reader.readAsArrayBuffer(file);
   };
 
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
         <PageHeader title="Expenses" subtitle="Operating costs like rent, utilities, and salaries" />
-        <PrimaryButton onClick={() => setOpen((v) => !v)}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Expense"}</PrimaryButton>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {currentUser.role === "admin" && (
+            <label className="pin-btn" style={{
+              display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.08)", color: PALETTE.ink,
+              padding: "10px 16px", borderRadius: 999, fontSize: 13.5, fontWeight: 600, border: `1px solid ${PALETTE.line}`, cursor: "pointer",
+            }}>
+              {importing ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : <FileText size={15} />}
+              {importing ? "Importing…" : "Import from Excel"}
+              <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} style={{ display: "none" }} />
+            </label>
+          )}
+          <PrimaryButton onClick={() => setOpen((v) => !v)}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Expense"}</PrimaryButton>
+        </div>
       </div>
+
+      {importMsg && (
+        <Card style={{ marginBottom: 16, borderColor: PALETTE.debit }}>
+          <div style={{ color: PALETTE.debit, fontSize: 13, display: "flex", gap: 8, alignItems: "center" }}><AlertCircle size={15} /> {importMsg}</div>
+        </Card>
+      )}
 
       {open && (
         <Card style={{ marginBottom: 20 }}>
           <form onSubmit={submit}>
             <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "140px 1fr 140px", gap: 10 }}>
               <div><label style={labelStyle}>Date</label><input type="date" style={inputStyle} value={date} onChange={(e) => setDate(e.target.value)} /></div>
-              <div><label style={labelStyle}>Vendor / Paid To</label><input style={inputStyle} value={vendor} onChange={(e) => setVendor(e.target.value)} placeholder="e.g. Electricity Bill" /></div>
+              <div><label style={labelStyle}>Vendor / Paid To (optional)</label><input style={inputStyle} value={vendor} onChange={(e) => setVendor(e.target.value)} placeholder="e.g. Electricity Bill" /></div>
               <div><label style={labelStyle}>Amount (BDT)</label><input style={inputStyle} type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" /></div>
             </div>
             <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
@@ -1671,18 +1950,50 @@ function Expenses({ accounts, expenses, currentUser, onAdd, onDelete }) {
 
       <Card>
         {expenses.length === 0 ? <EmptyState text="No expenses added yet" /> : (
-          <div style={{ overflowX: "auto" }}><table style={{ minWidth: 560 }}>
+          <div style={{ overflowX: "auto" }}><table style={{ minWidth: 640 }}>
             <thead><tr style={{ borderBottom: `1px solid ${PALETTE.line}` }}><Th>Date</Th><Th>Vendor</Th><Th>Category</Th><Th>Paid From</Th><Th align="right">Amount</Th><Th>By</Th><Th> </Th></tr></thead>
             <tbody>
               {expenses.map((exp) => {
                 const acc = accounts.find((a) => a.id === exp.accountId);
                 const paidFrom = accounts.find((a) => a.id === exp.paymentAccountId);
+                if (editingId === exp.id) {
+                  return (
+                    <tr key={exp.id} style={{ borderBottom: `1px solid ${PALETTE.line}` }}>
+                      <Td colSpan={7} style={{ padding: "12px 10px" }}>
+                        <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "130px 1fr 110px", gap: 8 }}>
+                          <input style={{ ...inputStyle, padding: "6px 8px" }} type="date" value={editForm.date} onChange={(e) => setEditForm({ ...editForm, date: e.target.value })} />
+                          <input style={{ ...inputStyle, padding: "6px 8px" }} value={editForm.vendor} onChange={(e) => setEditForm({ ...editForm, vendor: e.target.value })} placeholder="Vendor" />
+                          <input style={{ ...inputStyle, padding: "6px 8px" }} type="number" value={editForm.amount} onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })} placeholder="Amount" />
+                        </div>
+                        <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
+                          <select style={{ ...inputStyle, padding: "6px 8px" }} value={editForm.accountId} onChange={(e) => setEditForm({ ...editForm, accountId: e.target.value })}>
+                            {expenseAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                          </select>
+                          <select style={{ ...inputStyle, padding: "6px 8px" }} value={editForm.paymentAccountId} onChange={(e) => setEditForm({ ...editForm, paymentAccountId: e.target.value })}>
+                            {cashAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                          </select>
+                        </div>
+                        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                          <button className="pin-btn" onClick={() => saveEdit(exp.id)} style={{ background: PALETTE.credit, color: "#fff", fontSize: 12, padding: "6px 14px", borderRadius: 999 }}>Save</button>
+                          <button className="pin-btn" onClick={() => setEditingId(null)} style={{ background: "transparent", color: PALETTE.inkSoft, fontSize: 12 }}>Cancel</button>
+                        </div>
+                      </Td>
+                    </tr>
+                  );
+                }
                 return (
                   <tr key={exp.id} className="row-hover" style={{ borderBottom: `1px solid ${PALETTE.line}` }}>
                     <Td>{exp.date}</Td><Td>{exp.vendor}</Td><Td>{acc?.name || "—"}</Td>
                     <Td style={{ color: PALETTE.inkSoft, fontSize: 12.5 }}>{paidFrom?.name || "—"}</Td>
                     <Td align="right" mono>{fmtMoney(exp.amount)}</Td><Td>{exp.createdBy}</Td>
-                    <Td>{currentUser.role === "admin" && <button className="pin-btn" onClick={() => onDelete(exp)} style={{ background: "transparent", color: PALETTE.debit }}><Trash2 size={14} /></button>}</Td>
+                    <Td>
+                      {currentUser.role === "admin" && (
+                        <div style={{ display: "flex", gap: 2 }}>
+                          <button className="pin-btn" onClick={() => startEdit(exp)} style={{ background: "transparent", color: PALETTE.inkSoft, padding: 5 }}><Edit2 size={14} /></button>
+                          <button className="pin-btn" onClick={() => onDelete(exp)} style={{ background: "transparent", color: PALETTE.debit, padding: 5 }}><Trash2 size={14} /></button>
+                        </div>
+                      )}
+                    </Td>
                   </tr>
                 );
               })}
