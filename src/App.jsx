@@ -100,7 +100,7 @@ function generateInvoicePDF(invoice) {
   if (invoice.salesBy) { y += 14; doc.setTextColor(120); doc.text(`Sales by: ${invoice.salesBy}`, marginX, y); doc.setTextColor(20); }
 
   y += 30;
-  doc.setFillColor(23, 59, 51);
+  doc.setFillColor(92, 17, 25);
   doc.rect(marginX, y, pageWidth - marginX * 2, 22, "F");
   doc.setTextColor(255);
   doc.setFont("helvetica", "bold");
@@ -211,22 +211,24 @@ const KEYS = {
 };
 
 /* ---------------------------------------------------------
-   Design tokens — Pinterest-style: card-forward, rounded, airy
+   Design tokens — deep wine/maroon gradient, glass cards
 --------------------------------------------------------- */
 
 const PALETTE = {
-  bg: "#FAFAFA",
-  card: "#FFFFFF",
-  ink: "#1F2123",
-  inkSoft: "#767A80",
-  accent: "#E0483E",
-  accentSoft: "#FDEAE8",
-  credit: "#2F8F76",
-  creditSoft: "#E4F4EE",
-  debit: "#E0483E",
-  line: "#EEEEEE",
-  chip: "#F4F4F4",
-  sidebarActive: "#FDEAE8",
+  bg: "#2b070d",
+  card: "rgba(255,255,255,0.055)",
+  cardSolid: "#4a1119",
+  ink: "#F5EDEE",
+  inkSoft: "rgba(245,237,238,0.62)",
+  accent: "#E24C63",
+  accentSoft: "rgba(226,76,99,0.18)",
+  credit: "#4ADE95",
+  creditSoft: "rgba(74,222,149,0.16)",
+  debit: "#FF7A85",
+  debitSoft: "rgba(255,122,133,0.16)",
+  line: "rgba(255,255,255,0.14)",
+  chip: "rgba(255,255,255,0.09)",
+  sidebarActive: "rgba(226,76,99,0.22)",
 };
 
 const FONT = {
@@ -246,22 +248,25 @@ function GlobalStyles() {
         min-height: 100vh;
         background-color: ${PALETTE.bg};
         background-image:
-          radial-gradient(circle at 1px 1px, rgba(20,20,20,0.055) 1px, transparent 0),
-          radial-gradient(1100px circle at 92% -8%, rgba(224,72,62,0.07), transparent 55%),
-          radial-gradient(900px circle at -8% 108%, rgba(47,143,118,0.06), transparent 55%);
-        background-size: 22px 22px, auto, auto;
+          radial-gradient(1300px circle at 18% -8%, #7d1c29 0%, transparent 55%),
+          radial-gradient(1100px circle at 100% 10%, #601420 0%, transparent 50%),
+          radial-gradient(1000px circle at 10% 100%, #55111c 0%, transparent 55%);
         background-attachment: fixed;
+        color: ${PALETTE.ink};
       }
       input, select { font-family: ${FONT.body}; }
+      input::placeholder { color: rgba(245,237,238,0.38); }
+      input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.7; }
+      select option { background: ${PALETTE.cardSolid}; color: ${PALETTE.ink}; }
       table { border-collapse: collapse; width: 100%; }
       .pin-btn { cursor: pointer; border: none; transition: transform .12s ease, box-shadow .12s ease, opacity .12s ease; }
       .pin-btn:hover { transform: translateY(-1px); opacity: 0.94; }
       .pin-btn:active { transform: translateY(0); }
-      .pin-card { transition: box-shadow .15s ease, transform .15s ease; }
-      .pin-card:hover { box-shadow: 0 10px 28px rgba(0,0,0,0.09); transform: translateY(-2px); }
-      .row-hover:hover { background: #FAFAFA; }
+      .pin-card { transition: box-shadow .15s ease, transform .15s ease, background .15s ease; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+      .pin-card:hover { background: rgba(255,255,255,0.08); box-shadow: 0 14px 34px rgba(0,0,0,0.32); transform: translateY(-2px); }
+      .row-hover:hover { background: rgba(255,255,255,0.05); }
       ::-webkit-scrollbar { width: 8px; height: 8px; }
-      ::-webkit-scrollbar-thumb { background: #E4E4E4; border-radius: 4px; }
+      ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); border-radius: 4px; }
 
       .mobile-topbar { display: none; }
       .sidebar-overlay { display: none; }
@@ -273,14 +278,14 @@ function GlobalStyles() {
           transform: translateX(-100%); transition: transform .22s ease;
           box-shadow: 0 0 0 rgba(0,0,0,0);
         }
-        .app-sidebar.open { transform: translateX(0); box-shadow: 10px 0 30px rgba(0,0,0,0.15); }
+        .app-sidebar.open { transform: translateX(0); box-shadow: 10px 0 30px rgba(0,0,0,0.4); }
         .mobile-topbar {
           display: flex; align-items: center; justify-content: space-between;
-          padding: 14px 16px; background: #fff; border-bottom: 1px solid ${PALETTE.line};
+          padding: 14px 16px; background: ${PALETTE.cardSolid}; border-bottom: 1px solid ${PALETTE.line};
           position: sticky; top: 0; z-index: 60;
         }
         .sidebar-overlay.open {
-          display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 150;
+          display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 150;
         }
         .app-main { padding: 18px 16px !important; }
         .responsive-grid { grid-template-columns: 1fr !important; }
@@ -292,12 +297,12 @@ function GlobalStyles() {
 }
 
 const styles = {
-  bootScreen: { minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "transparent" },
+  bootScreen: { minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "transparent", color: PALETTE.ink },
   appShell: { display: "flex", minHeight: "100vh", background: "transparent", fontFamily: FONT.body, color: PALETTE.ink },
   main: { flex: 1, padding: "30px 36px", minWidth: 0, position: "relative" },
   toast: {
-    position: "fixed", top: 20, right: 24, background: "#fff", padding: "10px 18px",
-    borderRadius: 999, borderLeft: "4px solid", boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+    position: "fixed", top: 20, right: 24, background: PALETTE.cardSolid, color: PALETTE.ink, padding: "10px 18px",
+    borderRadius: 999, borderLeft: "4px solid", boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
     display: "flex", alignItems: "center", gap: 8, fontSize: 14, zIndex: 50,
   },
 };
@@ -305,7 +310,7 @@ const styles = {
 const labelStyle = { display: "block", fontSize: 12, color: PALETTE.inkSoft, marginBottom: 5, marginTop: 14, fontWeight: 600, letterSpacing: 0.2 };
 const inputStyle = {
   width: "100%", padding: "10px 13px", borderRadius: 12, border: `1px solid ${PALETTE.line}`,
-  fontSize: 14, background: "#fff", color: PALETTE.ink, outline: "none",
+  fontSize: 14, background: "rgba(255,255,255,0.06)", color: PALETTE.ink, outline: "none",
 };
 
 function PageHeader({ title, subtitle }) {
@@ -318,7 +323,7 @@ function PageHeader({ title, subtitle }) {
 }
 function Card({ children, style, className }) {
   return (
-    <div className={`pin-card ${className || ""}`} style={{ background: PALETTE.card, border: `1px solid ${PALETTE.line}`, borderRadius: 18, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.04)", ...style }}>
+    <div className={`pin-card ${className || ""}`} style={{ background: PALETTE.card, border: `1px solid ${PALETTE.line}`, borderRadius: 18, padding: 20, boxShadow: "0 4px 18px rgba(0,0,0,0.22)", ...style }}>
       {children}
     </div>
   );
@@ -328,7 +333,7 @@ function PrimaryButton({ children, onClick, type = "button", style, disabled }) 
     <button type={type} onClick={onClick} disabled={disabled} className="pin-btn" style={{
       display: "flex", alignItems: "center", gap: 6, background: PALETTE.accent, color: "#fff",
       padding: "10px 18px", borderRadius: 999, fontSize: 13.5, fontWeight: 600, fontFamily: FONT.body,
-      opacity: disabled ? 0.5 : 1, ...style,
+      boxShadow: "0 6px 18px rgba(226,76,99,0.35)", opacity: disabled ? 0.5 : 1, ...style,
     }}>{children}</button>
   );
 }
@@ -344,7 +349,7 @@ function Th({ children, align }) {
   return <th style={{ textAlign: align || "left", padding: "8px 10px", fontSize: 11, color: PALETTE.inkSoft, fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase" }}>{children}</th>;
 }
 function Td({ children, align, mono }) {
-  return <td style={{ textAlign: align || "left", padding: "11px 10px", fontSize: 13.5, fontFamily: mono ? FONT.mono : FONT.body }}>{children}</td>;
+  return <td style={{ textAlign: align || "left", padding: "11px 10px", fontSize: 13.5, fontFamily: mono ? FONT.mono : FONT.body, color: PALETTE.ink }}>{children}</td>;
 }
 function EmptyState({ text }) {
   return <div style={{ padding: "30px 10px", textAlign: "center", color: PALETTE.inkSoft, fontSize: 13.5 }}>{text}</div>;
@@ -353,7 +358,7 @@ function Badge({ children, tone = "neutral" }) {
   const tones = {
     neutral: { bg: PALETTE.chip, color: PALETTE.inkSoft },
     good: { bg: PALETTE.creditSoft, color: PALETTE.credit },
-    bad: { bg: PALETTE.accentSoft, color: PALETTE.debit },
+    bad: { bg: PALETTE.debitSoft, color: PALETTE.debit },
   };
   const t = tones[tone];
   return <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 20, fontWeight: 600, background: t.bg, color: t.color }}>{children}</span>;
@@ -443,6 +448,7 @@ export default function App() {
   if (booting) {
     return (
       <div style={styles.bootScreen}>
+        <GlobalStyles />
         <Loader2 size={28} style={{ animation: "spin 1s linear infinite" }} />
         <p style={{ marginTop: 12, fontFamily: FONT.body, color: PALETTE.ink }}>Loading…</p>
         <style>{`@keyframes spin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }`}</style>
@@ -452,6 +458,7 @@ export default function App() {
   if (error) {
     return (
       <div style={styles.bootScreen}>
+        <GlobalStyles />
         <AlertCircle size={28} color={PALETTE.debit} />
         <p style={{ marginTop: 12, color: PALETTE.ink, textAlign: "center", maxWidth: 320 }}>{error}</p>
       </div>
@@ -482,7 +489,9 @@ export default function App() {
       <GlobalStyles />
       <div className="mobile-topbar">
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <img src="/logo.png" alt="Two Threads" style={{ height: 32, width: "auto" }} />
+          <div style={{ background: "#fff", borderRadius: 9, padding: "4px 7px", display: "inline-flex" }}>
+            <img src="/logo.png" alt="Two Threads" style={{ height: 20, width: "auto", display: "block" }} />
+          </div>
         </div>
         <button className="pin-btn" onClick={() => setMobileNavOpen(true)} style={{ background: "transparent", padding: 6 }}>
           <Menu size={22} color={PALETTE.ink} />
@@ -703,13 +712,22 @@ function LoginScreen({ users, onCreateFirstAdmin, onLogin }) {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(160deg, #FDEAE8 0%, #FAFAFA 55%)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONT.body }}>
+    <div style={{
+      minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONT.body,
+      background: `${PALETTE.bg}`,
+      backgroundImage: "radial-gradient(1300px circle at 18% -8%, #7d1c29 0%, transparent 55%), radial-gradient(1100px circle at 100% 10%, #601420 0%, transparent 50%), radial-gradient(1000px circle at 10% 100%, #55111c 0%, transparent 55%)",
+    }}>
       <GlobalStyles />
-      <form onSubmit={submit} style={{ background: "#fff", width: 380, maxWidth: "90vw", padding: "38px 34px", borderRadius: 24, boxShadow: "0 24px 60px rgba(0,0,0,0.12)" }}>
+      <form onSubmit={submit} className="pin-card" style={{
+        background: PALETTE.card, border: `1px solid ${PALETTE.line}`, width: 380, maxWidth: "90vw",
+        padding: "38px 34px", borderRadius: 24, boxShadow: "0 30px 80px rgba(0,0,0,0.45)",
+      }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-          <img src="/logo.png" alt="Two Threads" style={{ height: 46, width: "auto" }} />
+          <div style={{ background: "#fff", borderRadius: 14, padding: "8px 12px", display: "inline-flex" }}>
+            <img src="/logo.png" alt="Two Threads" style={{ height: 40, width: "auto", display: "block" }} />
+          </div>
         </div>
-        <p style={{ color: PALETTE.inkSoft, fontSize: 13, marginTop: 0, marginBottom: 22 }}>
+        <p style={{ color: PALETTE.inkSoft, fontSize: 13, marginTop: 12, marginBottom: 22 }}>
           {isFirstRun ? "First time here — create your Admin account" : "Sign in with your name and PIN"}
         </p>
         <label style={labelStyle}>Name</label>
@@ -744,10 +762,12 @@ function Sidebar({ tab, setTab, currentUser, onLogout, mobileOpen, onCloseMobile
   if (currentUser.role === "admin") items.push({ key: "users", label: "Users", icon: User });
 
   return (
-    <aside className={`app-sidebar ${mobileOpen ? "open" : ""}`} style={{ width: 236, background: "#fff", borderRight: `1px solid ${PALETTE.line}`, display: "flex", flexDirection: "column", padding: "26px 14px", flexShrink: 0 }}>
+    <aside className={`app-sidebar ${mobileOpen ? "open" : ""}`} style={{ width: 236, background: PALETTE.cardSolid, borderRight: `1px solid ${PALETTE.line}`, display: "flex", flexDirection: "column", padding: "26px 14px", flexShrink: 0 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 8px", marginBottom: 26 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <img src="/logo.png" alt="Two Threads" style={{ height: 34, width: "auto" }} />
+          <div style={{ background: "#fff", borderRadius: 10, padding: "5px 8px", display: "inline-flex" }}>
+            <img src="/logo.png" alt="Two Threads" style={{ height: 24, width: "auto", display: "block" }} />
+          </div>
         </div>
         <button className="pin-btn" onClick={onCloseMobile} style={{ background: "transparent", padding: 4, display: mobileOpen ? "block" : "none" }}>
           <X size={20} color={PALETTE.inkSoft} />
@@ -953,7 +973,7 @@ function Inventory({ products, currentUser, onAdd, onDelete, onImport }) {
         {isAdmin && (
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <label className="pin-btn" style={{
-              display: "flex", alignItems: "center", gap: 6, background: "#fff", color: PALETTE.ink,
+              display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.08)", color: PALETTE.ink,
               padding: "10px 16px", borderRadius: 999, fontSize: 13.5, fontWeight: 600, border: `1px solid ${PALETTE.line}`, cursor: "pointer",
             }}>
               {importing ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : <FileText size={15} />}
@@ -1364,7 +1384,7 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onRecordPa
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {currentUser.role === "admin" && (
             <label className="pin-btn" style={{
-              display: "flex", alignItems: "center", gap: 6, background: "#fff", color: PALETTE.ink,
+              display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.08)", color: PALETTE.ink,
               padding: "10px 16px", borderRadius: 999, fontSize: 13.5, fontWeight: 600, border: `1px solid ${PALETTE.line}`, cursor: "pointer",
             }}>
               {importing ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : <FileText size={15} />}
@@ -1505,7 +1525,7 @@ function InvoiceDetailModal({ invoice, onClose }) {
 
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(20,20,20,0.45)", zIndex: 300, display: "flex", alignItems: "flex-start", justifyContent: "center", overflowY: "auto", padding: "40px 16px" }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 20, maxWidth: 560, width: "100%", padding: 28, boxShadow: "0 30px 80px rgba(0,0,0,0.3)" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: PALETTE.cardSolid, border: `1px solid ${PALETTE.line}`, borderRadius: 20, maxWidth: 560, width: "100%", padding: 28, boxShadow: "0 30px 80px rgba(0,0,0,0.5)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
           <div>
             <div style={{ fontFamily: FONT.display, fontSize: 20, fontWeight: 600 }}>{invoice.number}</div>
