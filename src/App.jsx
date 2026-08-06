@@ -2,10 +2,11 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   LayoutDashboard, FileText, Receipt, Wallet, ScrollText, Package, ClipboardList,
   Plus, Trash2, X, LogOut, ShieldCheck, User, AlertCircle,
-  CheckCircle2, Loader2, PieChart, Menu
+  CheckCircle2, Loader2, PieChart, Menu, Search, Download, Eye
 } from "lucide-react";
 import { supabase } from "./supabaseClient";
 import * as XLSX from "xlsx";
+import { jsPDF } from "jspdf";
 
 /* ---------------------------------------------------------
    Constants & helpers
@@ -22,16 +23,22 @@ const ACCOUNT_TYPES = [
 const DEFAULT_ACCOUNTS = [
   { id: "acc-1000", code: "1000", name: "Cash in Hand", type: "asset" },
   { id: "acc-1010", code: "1010", name: "Bank Account", type: "asset" },
+  { id: "acc-1020", code: "1020", name: "bKash", type: "asset" },
   { id: "acc-1200", code: "1200", name: "Accounts Receivable", type: "asset" },
   { id: "acc-1300", code: "1300", name: "Inventory", type: "asset" },
   { id: "acc-2000", code: "2000", name: "Accounts Payable", type: "liability" },
   { id: "acc-3000", code: "3000", name: "Owner's Equity", type: "equity" },
   { id: "acc-4000", code: "4000", name: "Sales / Service Income", type: "income" },
-  { id: "acc-5000", code: "5000", name: "General Expense", type: "expense" },
-  { id: "acc-5010", code: "5010", name: "Rent", type: "expense" },
-  { id: "acc-5020", code: "5020", name: "Utilities", type: "expense" },
-  { id: "acc-5030", code: "5030", name: "Salaries", type: "expense" },
-  { id: "acc-5040", code: "5040", name: "Cost of Goods Sold", type: "expense" },
+  { id: "acc-5990", code: "5990", name: "Cost of Goods Sold", type: "expense" },
+];
+
+// The business's real expense categories — used to seed Chart of Accounts via the
+// "Add Standard Categories" quick-setup button, and for brand-new installs.
+const STANDARD_EXPENSE_CATEGORIES = [
+  "Transportation", "Printing & Accessories", "Iffat Remuneration", "Raisa Remuneration",
+  "Manager Salary", "Moderator 1 (Sadia) Salary", "Moderator 2 (Adiba) Salary", "Tailor",
+  "Loan Repay", "Other Stitching Expense", "Purchase", "Office Rent", "Cost Of Investment",
+  "Marketing Stock", "China Import", "Customer Refund", "Campaign", "Savings",
 ];
 
 const PAYMENT_METHODS = ["Cash", "Bank Transfer", "Mobile Banking (bKash/Nagad/Rocket)", "Card", "Cheque", "Other"];
@@ -51,6 +58,121 @@ function fmtMoney(n) {
 function normalSideFor(type) {
   return (type === "asset" || type === "expense") ? "debit" : "credit";
 }
+
+function generateInvoicePDF(invoice) {
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const marginX = 48;
+  let y = 56;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(20);
+  doc.text("Two Threads", marginX, y);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(120);
+  doc.text("Accounting & Invoicing", marginX, y + 16);
+  doc.setTextColor(20);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  doc.text("INVOICE", pageWidth - marginX, y, { align: "right" });
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.text(invoice.number, pageWidth - marginX, y + 16, { align: "right" });
+  doc.text(`Date: ${invoice.date}`, pageWidth - marginX, y + 30, { align: "right" });
+  if (invoice.dueDate) doc.text(`Due: ${invoice.dueDate}`, pageWidth - marginX, y + 44, { align: "right" });
+
+  y += 70;
+  doc.setDrawColor(220);
+  doc.line(marginX, y, pageWidth - marginX, y);
+  y += 24;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.text("Bill To", marginX, y);
+  y += 16;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10.5);
+  doc.text(invoice.customer || "-", marginX, y);
+  if (invoice.phone) { y += 14; doc.text(invoice.phone, marginX, y); }
+  if (invoice.address) { y += 14; doc.text(invoice.address, marginX, y, { maxWidth: 260 }); }
+  if (invoice.salesBy) { y += 14; doc.setTextColor(120); doc.text(`Sales by: ${invoice.salesBy}`, marginX, y); doc.setTextColor(20); }
+
+  y += 30;
+  doc.setFillColor(23, 59, 51);
+  doc.rect(marginX, y, pageWidth - marginX * 2, 22, "F");
+  doc.setTextColor(255);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9.5);
+  doc.text("DESCRIPTION", marginX + 8, y + 15);
+  doc.text("QTY", pageWidth - marginX - 190, y + 15, { align: "right" });
+  doc.text("RATE", pageWidth - marginX - 100, y + 15, { align: "right" });
+  doc.text("AMOUNT", pageWidth - marginX - 8, y + 15, { align: "right" });
+  y += 22;
+  doc.setTextColor(20);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+
+  (invoice.items || []).forEach((it, idx) => {
+    const rowY = y + 18;
+    if (idx % 2 === 1) {
+      doc.setFillColor(248, 248, 248);
+      doc.rect(marginX, y, pageWidth - marginX * 2, 22, "F");
+    }
+    doc.text(String(it.desc || ""), marginX + 8, rowY - 3, { maxWidth: pageWidth - marginX * 2 - 220 });
+    doc.text(String(it.qty), pageWidth - marginX - 190, rowY - 3, { align: "right" });
+    doc.text(fmtMoney(it.rate), pageWidth - marginX - 100, rowY - 3, { align: "right" });
+    doc.text(fmtMoney((Number(it.qty) || 0) * (Number(it.rate) || 0)), pageWidth - marginX - 8, rowY - 3, { align: "right" });
+    y += 22;
+  });
+
+  y += 8;
+  doc.setDrawColor(220);
+  doc.line(marginX, y, pageWidth - marginX, y);
+  y += 20;
+
+  const paidTotal = (invoice.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  const balanceDue = invoice.total - paidTotal;
+
+  const summaryX = pageWidth - marginX - 200;
+  doc.setFont("helvetica", "normal");
+  doc.text("Subtotal", summaryX, y);
+  doc.text(fmtMoney(invoice.total), pageWidth - marginX - 8, y, { align: "right" });
+  y += 16;
+  if (paidTotal > 0) {
+    doc.text("Paid", summaryX, y);
+    doc.text(fmtMoney(paidTotal), pageWidth - marginX - 8, y, { align: "right" });
+    y += 16;
+  }
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11.5);
+  doc.text("Balance Due", summaryX, y);
+  doc.text(fmtMoney(balanceDue), pageWidth - marginX - 8, y, { align: "right" });
+  y += 30;
+
+  if ((invoice.payments || []).length > 0) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.text("Payment History", marginX, y);
+    y += 14;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.5);
+    doc.setTextColor(90);
+    invoice.payments.forEach((p) => {
+      doc.text(`${p.date} — ${fmtMoney(p.amount)} (${p.method || "Payment"})`, marginX, y);
+      y += 13;
+    });
+    doc.setTextColor(20);
+  }
+
+  doc.setFontSize(8.5);
+  doc.setTextColor(150);
+  doc.text("Thank you for your business — Two Threads", marginX, doc.internal.pageSize.getHeight() - 36);
+
+  doc.save(`${invoice.number}.pdf`);
+}
+
 function colorFor(seed) {
   let h = 0;
   for (let i = 0; i < seed.length; i++) h = seed.charCodeAt(i) + ((h << 5) - h);
@@ -118,7 +240,18 @@ function GlobalStyles() {
     <style>{`
       @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
       * { box-sizing: border-box; }
-      body { margin: 0; }
+      html { background: ${PALETTE.bg}; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background-color: ${PALETTE.bg};
+        background-image:
+          radial-gradient(circle at 1px 1px, rgba(20,20,20,0.055) 1px, transparent 0),
+          radial-gradient(1100px circle at 92% -8%, rgba(224,72,62,0.07), transparent 55%),
+          radial-gradient(900px circle at -8% 108%, rgba(47,143,118,0.06), transparent 55%);
+        background-size: 22px 22px, auto, auto;
+        background-attachment: fixed;
+      }
       input, select { font-family: ${FONT.body}; }
       table { border-collapse: collapse; width: 100%; }
       .pin-btn { cursor: pointer; border: none; transition: transform .12s ease, box-shadow .12s ease, opacity .12s ease; }
@@ -159,8 +292,8 @@ function GlobalStyles() {
 }
 
 const styles = {
-  bootScreen: { minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: PALETTE.bg },
-  appShell: { display: "flex", minHeight: "100vh", background: PALETTE.bg, fontFamily: FONT.body, color: PALETTE.ink },
+  bootScreen: { minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "transparent" },
+  appShell: { display: "flex", minHeight: "100vh", background: "transparent", fontFamily: FONT.body, color: PALETTE.ink },
   main: { flex: 1, padding: "30px 36px", minWidth: 0, position: "relative" },
   toast: {
     position: "fixed", top: 20, right: 24, background: "#fff", padding: "10px 18px",
@@ -434,9 +567,8 @@ export default function App() {
         {tab === "invoices" && (
           <Invoices
             accounts={accounts} products={products} invoices={invoices} currentUser={currentUser}
-            onAdd={async (invoice, journalEntry, qtyChanges) => {
+            onAdd={async (invoice, journalEntry, qtyChanges, advanceInfo) => {
               const je = { ...journalEntry, id: uid("je"), createdBy: currentUser.name };
-              await persistJournal([je, ...journal]);
               if (qtyChanges.length) {
                 const nextProducts = products.map((p) => {
                   const chg = qtyChanges.find((c) => c.productId === p.id);
@@ -445,21 +577,37 @@ export default function App() {
                 });
                 await persistProducts(nextProducts);
               }
-              await persistInvoices([{ ...invoice, id: uid("inv"), journalId: je.id, createdBy: currentUser.name }, ...invoices]);
+              const newInvoice = { ...invoice, id: uid("inv"), journalId: je.id, createdBy: currentUser.name };
+              let journalToSave = [je, ...journal];
+              if (advanceInfo && advanceInfo.amount > 0 && advanceInfo.accountId && arAccount) {
+                const payJe = {
+                  id: uid("je"), date: todayStr(), memo: `Advance received — Invoice ${invoice.number} (${advanceInfo.method})`,
+                  lines: [{ accountId: advanceInfo.accountId, debit: advanceInfo.amount, credit: 0 }, { accountId: arAccount.id, debit: 0, credit: advanceInfo.amount }],
+                  createdBy: currentUser.name, source: "invoice-payment", refId: newInvoice.id,
+                };
+                journalToSave = [payJe, je, ...journal];
+                newInvoice.payments = [{ id: uid("pay"), date: todayStr(), amount: advanceInfo.amount, accountId: advanceInfo.accountId, method: advanceInfo.method }];
+                newInvoice.status = advanceInfo.amount >= invoice.total ? "paid" : "partial";
+              }
+              await persistJournal(journalToSave);
+              await persistInvoices([newInvoice, ...invoices]);
               showToast("Invoice created");
             }}
-            onMarkPaid={async (invoice, paymentAccountId, paymentMethod) => {
+            onRecordPayment={async (invoice, amount, accountId, method) => {
               const je = {
-                id: uid("je"), date: todayStr(), memo: `Payment received — Invoice ${invoice.number} (${paymentMethod})`,
+                id: uid("je"), date: todayStr(), memo: `Payment received — Invoice ${invoice.number} (${method})`,
                 lines: [
-                  { accountId: paymentAccountId, debit: invoice.total, credit: 0 },
-                  { accountId: arAccount ? arAccount.id : "", debit: 0, credit: invoice.total },
+                  { accountId: accountId, debit: amount, credit: 0 },
+                  { accountId: arAccount ? arAccount.id : "", debit: 0, credit: amount },
                 ],
                 createdBy: currentUser.name, source: "invoice-payment", refId: invoice.id,
               };
               await persistJournal([je, ...journal]);
-              await persistInvoices(invoices.map((i) => (i.id === invoice.id ? { ...i, status: "paid", paymentMethod, paymentAccountId } : i)));
-              showToast("Marked as paid");
+              const payments = [...(invoice.payments || []), { id: uid("pay"), date: todayStr(), amount, accountId, method }];
+              const paidTotal = payments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+              const status = paidTotal <= 0 ? "unpaid" : paidTotal >= invoice.total ? "paid" : "partial";
+              await persistInvoices(invoices.map((i) => (i.id === invoice.id ? { ...i, payments, status } : i)));
+              showToast("Payment recorded");
             }}
             onDelete={async (invoice) => {
               const productItems = invoice.items.filter((it) => it.productId);
@@ -472,8 +620,13 @@ export default function App() {
                 await persistProducts(nextProducts);
               }
               await persistInvoices(invoices.filter((i) => i.id !== invoice.id));
-              await persistJournal(journal.filter((j) => j.id !== invoice.journalId));
+              await persistJournal(journal.filter((j) => j.id !== invoice.journalId && j.refId !== invoice.id));
               showToast("Invoice deleted");
+            }}
+            onBulkImport={async ({ newInvoices, newJournalEntries }) => {
+              await persistJournal([...newJournalEntries, ...journal]);
+              await persistInvoices([...newInvoices, ...invoices]);
+              showToast(`${newInvoices.length} invoices imported`);
             }}
           />
         )}
@@ -499,6 +652,7 @@ export default function App() {
           <ChartOfAccounts
             accounts={accounts} balances={balances} currentUser={currentUser}
             onAdd={async (acc) => { await persistAccounts([...accounts, { ...acc, id: uid("acc") }]); showToast("Account added"); }}
+            onAddMany={async (accs) => { await persistAccounts([...accounts, ...accs.map((a) => ({ ...a, id: uid("acc") }))]); showToast(`${accs.length} accounts added`); }}
             onDelete={async (id) => { await persistAccounts(accounts.filter((a) => a.id !== id)); showToast("Account deleted"); }}
           />
         )}
@@ -636,7 +790,7 @@ function Sidebar({ tab, setTab, currentUser, onLogout, mobileOpen, onCloseMobile
 --------------------------------------------------------- */
 
 function Dashboard({ accounts, balances, journal, products }) {
-  const cash = accounts.filter((a) => a.type === "asset" && (a.name.includes("Cash") || a.name.includes("Bank"))).reduce((s, a) => s + (balances[a.id] || 0), 0);
+  const cash = accounts.filter((a) => a.type === "asset" && a.name !== "Accounts Receivable" && a.name !== "Inventory").reduce((s, a) => s + (balances[a.id] || 0), 0);
   const receivable = accounts.filter((a) => a.name === "Accounts Receivable").reduce((s, a) => s + (balances[a.id] || 0), 0);
   const income = accounts.filter((a) => a.type === "income").reduce((s, a) => s + (balances[a.id] || 0), 0);
   const expenseTotal = accounts.filter((a) => a.type === "expense").reduce((s, a) => s + (balances[a.id] || 0), 0);
@@ -645,7 +799,7 @@ function Dashboard({ accounts, balances, journal, products }) {
   const lowStock = products.filter((p) => (Number(p.qty) || 0) <= (Number(p.reorderLevel) || 3));
 
   const cards = [
-    { label: "Cash + Bank", value: cash, color: PALETTE.credit },
+    { label: "Cash, Bank & bKash", value: cash, color: PALETTE.credit },
     { label: "Receivable", value: receivable, color: PALETTE.accent },
     { label: "Inventory Value", value: inventoryValue, color: "#8F6FC9" },
     { label: "Total Income", value: income, color: PALETTE.credit },
@@ -714,7 +868,14 @@ function Inventory({ products, currentUser, onAdd, onDelete, onImport }) {
   const [form, setForm] = useState({ name: "", sku: "", unit: "pcs", qty: "", costPrice: "", salePrice: "", reorderLevel: "3" });
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState("");
+  const [search, setSearch] = useState("");
   const isAdmin = currentUser.role === "admin";
+
+  const filteredProducts = products.filter((p) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return p.name.toLowerCase().includes(q) || (p.sku || "").toLowerCase().includes(q);
+  });
 
   const submit = (e) => {
     e.preventDefault();
@@ -829,11 +990,23 @@ function Inventory({ products, currentUser, onAdd, onDelete, onImport }) {
         </Card>
       )}
 
-      {products.length === 0 ? (
-        <Card><EmptyState text="No products yet — add your first product to start tracking stock." /></Card>
+      <Card style={{ marginBottom: 16, padding: 12 }}>
+        <div style={{ position: "relative" }}>
+          <Search size={16} color={PALETTE.inkSoft} style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)" }} />
+          <input
+            style={{ ...inputStyle, paddingLeft: 38 }}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search products by name or SKU…"
+          />
+        </div>
+      </Card>
+
+      {filteredProducts.length === 0 ? (
+        <Card><EmptyState text={products.length === 0 ? "No products yet — add your first product to start tracking stock." : "No products match your search."} /></Card>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
-          {products.map((p) => {
+          {filteredProducts.map((p) => {
             const low = (Number(p.qty) || 0) <= (Number(p.reorderLevel) || 3);
             const out = (Number(p.qty) || 0) <= 0;
             return (
@@ -879,7 +1052,7 @@ function Bills({ accounts, products, bills, currentUser, onAdd, onMarkPaid, onDe
 
   const apAccount = accounts.find((a) => a.name === "Accounts Payable");
   const inventoryAccount = accounts.find((a) => a.name === "Inventory");
-  const cashAccounts = accounts.filter((a) => a.name.includes("Cash") || a.name.includes("Bank"));
+  const cashAccounts = accounts.filter((a) => a.type === "asset" && a.name !== "Accounts Receivable" && a.name !== "Inventory");
 
   const total = items.reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.cost) || 0), 0);
 
@@ -1002,21 +1175,31 @@ function Bills({ accounts, products, bills, currentUser, onAdd, onMarkPaid, onDe
    Invoices — items can link to inventory products
 --------------------------------------------------------- */
 
-function Invoices({ accounts, products, invoices, currentUser, onAdd, onMarkPaid, onDelete }) {
+function Invoices({ accounts, products, invoices, currentUser, onAdd, onRecordPayment, onDelete, onBulkImport }) {
   const [open, setOpen] = useState(false);
   const [customer, setCustomer] = useState("");
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
+  const [salesBy, setSalesBy] = useState("");
   const [date, setDate] = useState(todayStr());
   const [dueDate, setDueDate] = useState(todayStr());
   const [items, setItems] = useState([{ productId: "", desc: "", qty: 1, rate: "" }]);
+  const [advance, setAdvance] = useState("");
+  const [advanceAccount, setAdvanceAccount] = useState("");
+  const [advanceMethod, setAdvanceMethod] = useState("Cash");
   const [payFor, setPayFor] = useState(null);
+  const [payAmount, setPayAmount] = useState("");
   const [payAccount, setPayAccount] = useState("");
   const [payMethod, setPayMethod] = useState("Cash");
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState("");
+  const [viewingInvoice, setViewingInvoice] = useState(null);
 
   const incomeAccount = accounts.find((a) => a.type === "income");
   const arAccount = accounts.find((a) => a.name === "Accounts Receivable");
   const inventoryAccount = accounts.find((a) => a.name === "Inventory");
   const cogsAccount = accounts.find((a) => a.name === "Cost of Goods Sold");
-  const cashAccounts = accounts.filter((a) => a.name.includes("Cash") || a.name.includes("Bank"));
+  const cashAccounts = accounts.filter((a) => a.type === "asset" && a.name !== "Accounts Receivable" && a.name !== "Inventory");
 
   const total = items.reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.rate) || 0), 0);
 
@@ -1036,7 +1219,10 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onMarkPaid
     if (!customer.trim() || total <= 0 || !arAccount || !incomeAccount) return;
     const number = `INV-${String(invoices.length + 1).padStart(4, "0")}`;
     const cleanItems = items.filter((it) => it.desc.trim() && (Number(it.qty) || 0) > 0);
-    const invoice = { number, customer: customer.trim(), date, dueDate, items: cleanItems, total, status: "unpaid" };
+    const invoice = {
+      number, customer: customer.trim(), phone: phone.trim(), address: address.trim(), salesBy: salesBy.trim(),
+      date, dueDate, items: cleanItems, total, payments: [], status: "unpaid",
+    };
 
     const lines = [{ accountId: arAccount.id, debit: total, credit: 0 }, { accountId: incomeAccount.id, debit: 0, credit: total }];
     const qtyChanges = [];
@@ -1056,22 +1242,159 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onMarkPaid
     }
 
     const journalEntry = { date, memo: `Invoice ${number} — ${customer.trim()}`, lines, source: "invoice" };
-    onAdd(invoice, journalEntry, qtyChanges);
-    setCustomer(""); setItems([{ productId: "", desc: "", qty: 1, rate: "" }]); setOpen(false);
+    onAdd(invoice, journalEntry, qtyChanges, Number(advance) > 0 ? { amount: Number(advance), accountId: advanceAccount, method: advanceMethod } : null);
+    setCustomer(""); setPhone(""); setAddress(""); setSalesBy(""); setItems([{ productId: "", desc: "", qty: 1, rate: "" }]);
+    setAdvance(""); setAdvanceAccount(""); setOpen(false);
+  };
+
+  const pick = (row, keys) => {
+    for (const k of keys) {
+      for (const rk of Object.keys(row)) {
+        if (rk.trim().toLowerCase() === k.toLowerCase()) return row[rk];
+      }
+    }
+    return undefined;
+  };
+
+  const toDateStr = (v) => {
+    if (!v) return todayStr();
+    if (v instanceof Date) return v.toISOString().slice(0, 10);
+    const d = new Date(v);
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+    return todayStr();
+  };
+
+  const handleFile = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    setImporting(true);
+    setImportMsg("");
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = new Uint8Array(evt.target.result);
+        const wb = XLSX.read(data, { type: "array", cellDates: true });
+        const sheetName = wb.SheetNames.find((n) => n.trim().toLowerCase().includes("sales")) || wb.SheetNames[0];
+        const ws = wb.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
+
+        const cashFallback = accounts.find((a) => a.name === "Cash in Hand") || cashAccounts[0];
+        const newInvoices = [];
+        const newJournalEntries = [];
+        let n = invoices.length;
+
+        rows.forEach((row) => {
+          const customerName = String(pick(row, ["Customer Name"]) || "").trim();
+          const qty = Number(pick(row, ["Qty", "Quantity"])) || 0;
+          if (!customerName || qty <= 0) return;
+          const rate = Number(pick(row, ["Unit Price"])) || 0;
+          const rowTotal = Number(pick(row, ["Price"])) || qty * rate;
+          if (rowTotal <= 0) return;
+
+          n += 1;
+          const number = `INV-${String(n).padStart(4, "0")}`;
+          const desc = String(pick(row, ["Product", "Dress name"]) || "Item").trim();
+          const rowDate = toDateStr(pick(row, ["Date"]));
+
+          const payments = [];
+          const advanceAmt = Number(pick(row, ["Advance"])) || 0;
+          if (advanceAmt > 0) payments.push({ id: uid("pay"), date: rowDate, amount: advanceAmt, accountId: cashFallback ? cashFallback.id : "", method: "Imported" });
+          const paymentAmt = Number(pick(row, ["Payment Amount"])) || 0;
+          if (paymentAmt > 0) {
+            const payDate = toDateStr(pick(row, ["Payment Date"])) || rowDate;
+            payments.push({ id: uid("pay"), date: payDate, amount: paymentAmt, accountId: cashFallback ? cashFallback.id : "", method: "Imported" });
+          }
+          const paidTotal = payments.reduce((s, p) => s + p.amount, 0);
+          const status = paidTotal <= 0 ? "unpaid" : paidTotal >= rowTotal ? "paid" : "partial";
+
+          const invoice = {
+            id: uid("inv"), number, customer: customerName,
+            phone: String(pick(row, ["Contact number", "Contact Number"]) || "").trim(),
+            address: String(pick(row, ["Address"]) || "").trim(),
+            salesBy: String(pick(row, ["Sales By"]) || "").trim(),
+            date: rowDate, dueDate: rowDate,
+            items: [{ productId: null, desc, qty, rate }],
+            total: rowTotal, payments, status,
+            createdBy: currentUser.name, historical: true,
+          };
+
+          if (arAccount && incomeAccount) {
+            const revJe = {
+              id: uid("je"), date: rowDate, memo: `Invoice ${number} — ${customerName} (imported)`,
+              lines: [{ accountId: arAccount.id, debit: rowTotal, credit: 0 }, { accountId: incomeAccount.id, debit: 0, credit: rowTotal }],
+              createdBy: currentUser.name, source: "invoice", refId: invoice.id,
+            };
+            newJournalEntries.push(revJe);
+            invoice.journalId = revJe.id;
+          }
+          payments.forEach((p) => {
+            if (!p.accountId || !arAccount) return;
+            newJournalEntries.push({
+              id: uid("je"), date: p.date, memo: `Payment received — Invoice ${number} (imported)`,
+              lines: [{ accountId: p.accountId, debit: p.amount, credit: 0 }, { accountId: arAccount.id, debit: 0, credit: p.amount }],
+              createdBy: currentUser.name, source: "invoice-payment", refId: invoice.id,
+            });
+          });
+
+          newInvoices.push(invoice);
+        });
+
+        if (newInvoices.length === 0) {
+          setImportMsg('No sales rows found. Make sure the sheet has "Customer Name", "Qty", "Unit Price"/"Price" columns.');
+        } else {
+          const ok = window.confirm(
+            `${newInvoices.length} past sales found. These will be added as historical invoices for your records — inventory stock will NOT be changed. Continue?`
+          );
+          if (ok) onBulkImport({ newInvoices, newJournalEntries });
+        }
+      } catch (err) {
+        setImportMsg("Could not read this file. Please check it's a valid .xlsx export.");
+      } finally {
+        setImporting(false);
+        e.target.value = "";
+      }
+    };
+    reader.readAsArrayBuffer(file);
   };
 
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
         <PageHeader title="Invoices" subtitle="Create a new invoice — inventory and journal entries update automatically" />
-        <PrimaryButton onClick={() => setOpen((v) => !v)}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Invoice"}</PrimaryButton>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {currentUser.role === "admin" && (
+            <label className="pin-btn" style={{
+              display: "flex", alignItems: "center", gap: 6, background: "#fff", color: PALETTE.ink,
+              padding: "10px 16px", borderRadius: 999, fontSize: 13.5, fontWeight: 600, border: `1px solid ${PALETTE.line}`, cursor: "pointer",
+            }}>
+              {importing ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : <FileText size={15} />}
+              {importing ? "Importing…" : "Import Past Sales"}
+              <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} style={{ display: "none" }} />
+            </label>
+          )}
+          <PrimaryButton onClick={() => setOpen((v) => !v)}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Invoice"}</PrimaryButton>
+        </div>
       </div>
+
+      {importMsg && (
+        <Card style={{ marginBottom: 16, borderColor: PALETTE.debit }}>
+          <div style={{ color: PALETTE.debit, fontSize: 13, display: "flex", gap: 8, alignItems: "center" }}><AlertCircle size={15} /> {importMsg}</div>
+        </Card>
+      )}
 
       {open && (
         <Card style={{ marginBottom: 20 }}>
           <form onSubmit={submit}>
-            <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 160px 160px", gap: 10 }}>
-              <div><label style={labelStyle}>Customer Name</label><input style={inputStyle} value={customer} onChange={(e) => setCustomer(e.target.value)} placeholder="Customer / company" /></div>
+            <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div><label style={labelStyle}>Customer Name</label><input style={inputStyle} value={customer} onChange={(e) => setCustomer(e.target.value)} placeholder="Customer name" /></div>
+              <div><label style={labelStyle}>Phone (optional)</label><input style={inputStyle} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="01XXXXXXXXX" /></div>
+            </div>
+            <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
+              <div><label style={labelStyle}>Address (optional)</label><input style={inputStyle} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Delivery address" /></div>
+              <div><label style={labelStyle}>Sales By (optional)</label><input style={inputStyle} value={salesBy} onChange={(e) => setSalesBy(e.target.value)} placeholder="Staff name" /></div>
+            </div>
+            <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 160px 160px", gap: 10, marginTop: 10 }}>
+              <div />
               <div><label style={labelStyle}>Date</label><input type="date" style={inputStyle} value={date} onChange={(e) => setDate(e.target.value)} /></div>
               <div><label style={labelStyle}>Due Date</label><input type="date" style={inputStyle} value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></div>
             </div>
@@ -1102,6 +1425,12 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onMarkPaid
               <GhostButton onClick={() => setItems([...items, { productId: "", desc: "", qty: 1, rate: "" }])}>+ Add another item</GhostButton>
             </div>
 
+            <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "160px 1fr 1fr", gap: 10, marginTop: 14 }}>
+              <div><label style={labelStyle}>Advance Received (optional)</label><input style={inputStyle} type="number" value={advance} onChange={(e) => setAdvance(e.target.value)} placeholder="0" /></div>
+              <div><label style={labelStyle}>Advance Method</label><select style={inputStyle} value={advanceMethod} onChange={(e) => setAdvanceMethod(e.target.value)}>{PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}</select></div>
+              <div><label style={labelStyle}>Deposit To</label><select style={inputStyle} value={advanceAccount} onChange={(e) => setAdvanceAccount(e.target.value)}><option value="">Select</option>{cashAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+            </div>
+
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16 }}>
               <div style={{ fontFamily: FONT.mono, fontSize: 16 }}>Total: {fmtMoney(total)}</div>
               <PrimaryButton type="submit">Create Invoice</PrimaryButton>
@@ -1112,41 +1441,128 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onMarkPaid
 
       <Card>
         {invoices.length === 0 ? <EmptyState text="No invoices yet" /> : (
-          <div style={{ overflowX: "auto" }}><table style={{ minWidth: 560 }}>
-            <thead><tr style={{ borderBottom: `1px solid ${PALETTE.line}` }}><Th>No.</Th><Th>Customer</Th><Th>Date</Th><Th align="right">Total</Th><Th>Status</Th><Th>Payment</Th><Th> </Th></tr></thead>
+          <div style={{ overflowX: "auto" }}><table style={{ minWidth: 720 }}>
+            <thead><tr style={{ borderBottom: `1px solid ${PALETTE.line}` }}><Th>No.</Th><Th>Customer</Th><Th>Phone</Th><Th>Date</Th><Th align="right">Total</Th><Th align="right">Due</Th><Th>Status</Th><Th> </Th></tr></thead>
             <tbody>
-              {invoices.map((inv) => (
-                <tr key={inv.id} className="row-hover" style={{ borderBottom: `1px solid ${PALETTE.line}` }}>
-                  <Td mono>{inv.number}</Td><Td>{inv.customer}</Td><Td>{inv.date}</Td><Td align="right" mono>{fmtMoney(inv.total)}</Td>
-                  <Td><Badge tone={inv.status === "paid" ? "good" : "bad"}>{inv.status === "paid" ? "Paid" : "Unpaid"}</Badge></Td>
-                  <Td style={{ fontSize: 12.5, color: PALETTE.inkSoft }}>{inv.status === "paid" ? (inv.paymentMethod || "—") : "—"}</Td>
-                  <Td>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      {inv.status !== "paid" && (
-                        payFor === inv.id ? (
-                          <>
-                            <select style={{ ...inputStyle, padding: "4px 6px", fontSize: 12, width: "auto" }} value={payMethod} onChange={(e) => setPayMethod(e.target.value)}>
-                              {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
-                            </select>
-                            <select style={{ ...inputStyle, padding: "4px 6px", fontSize: 12, width: "auto" }} value={payAccount} onChange={(e) => setPayAccount(e.target.value)}>
-                              <option value="">Deposit to…</option>
-                              {cashAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-                            </select>
-                            <button className="pin-btn" disabled={!payAccount} onClick={() => { onMarkPaid(inv, payAccount, payMethod); setPayFor(null); setPayAccount(""); setPayMethod("Cash"); }} style={{ background: PALETTE.credit, color: "#fff", fontSize: 12, padding: "5px 10px", borderRadius: 999, opacity: payAccount ? 1 : 0.5 }}>Confirm</button>
-                          </>
-                        ) : (
-                          <GhostButton onClick={() => setPayFor(inv.id)}>Record Payment</GhostButton>
-                        )
-                      )}
-                      {currentUser.role === "admin" && <button className="pin-btn" onClick={() => onDelete(inv)} style={{ background: "transparent", color: PALETTE.debit }}><Trash2 size={14} /></button>}
-                    </div>
-                  </Td>
-                </tr>
-              ))}
+              {invoices.map((inv) => {
+                const paidTotal = (inv.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+                const balanceDue = inv.total - paidTotal;
+                const statusTone = inv.status === "paid" ? "good" : inv.status === "partial" ? "neutral" : "bad";
+                const statusLabel = inv.status === "paid" ? "Paid" : inv.status === "partial" ? "Partial" : "Unpaid";
+                return (
+                  <tr key={inv.id} className="row-hover" style={{ borderBottom: `1px solid ${PALETTE.line}` }}>
+                    <Td mono>
+                      <button className="pin-btn" onClick={() => setViewingInvoice(inv)} style={{ background: "transparent", color: PALETTE.accent, fontFamily: FONT.mono, fontSize: 13.5, padding: 0, textDecoration: "underline" }}>
+                        {inv.number}
+                      </button>
+                    </Td>
+                    <Td>{inv.customer}{inv.salesBy ? <div style={{ fontSize: 11, color: PALETTE.inkSoft }}>by {inv.salesBy}</div> : null}</Td>
+                    <Td style={{ fontSize: 12.5, color: PALETTE.inkSoft }}>{inv.phone || "—"}</Td>
+                    <Td>{inv.date}</Td>
+                    <Td align="right" mono>{fmtMoney(inv.total)}</Td>
+                    <Td align="right" mono>{balanceDue > 0 ? fmtMoney(balanceDue) : "—"}</Td>
+                    <Td><Badge tone={statusTone}>{statusLabel}</Badge></Td>
+                    <Td>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {inv.status !== "paid" && (
+                          payFor === inv.id ? (
+                            <>
+                              <input style={{ ...inputStyle, padding: "4px 6px", fontSize: 12, width: 90 }} type="number" placeholder="Amount" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
+                              <select style={{ ...inputStyle, padding: "4px 6px", fontSize: 12, width: "auto" }} value={payMethod} onChange={(e) => setPayMethod(e.target.value)}>
+                                {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+                              </select>
+                              <select style={{ ...inputStyle, padding: "4px 6px", fontSize: 12, width: "auto" }} value={payAccount} onChange={(e) => setPayAccount(e.target.value)}>
+                                <option value="">Deposit to…</option>
+                                {cashAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                              </select>
+                              <button className="pin-btn" disabled={!payAccount || !(Number(payAmount) > 0)} onClick={() => { onRecordPayment(inv, Number(payAmount), payAccount, payMethod); setPayFor(null); setPayAccount(""); setPayAmount(""); setPayMethod("Cash"); }} style={{ background: PALETTE.credit, color: "#fff", fontSize: 12, padding: "5px 10px", borderRadius: 999, opacity: (payAccount && Number(payAmount) > 0) ? 1 : 0.5 }}>Confirm</button>
+                            </>
+                          ) : (
+                            <GhostButton onClick={() => { setPayFor(inv.id); setPayAmount(String(balanceDue > 0 ? balanceDue : "")); }}>Record Payment</GhostButton>
+                          )
+                        )}
+                        {currentUser.role === "admin" && <button className="pin-btn" onClick={() => onDelete(inv)} style={{ background: "transparent", color: PALETTE.debit }}><Trash2 size={14} /></button>}
+                      </div>
+                    </Td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table></div>
         )}
       </Card>
+
+      {viewingInvoice && <InvoiceDetailModal invoice={viewingInvoice} onClose={() => setViewingInvoice(null)} />}
+    </div>
+  );
+}
+
+function InvoiceDetailModal({ invoice, onClose }) {
+  const paidTotal = (invoice.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  const balanceDue = invoice.total - paidTotal;
+  const statusTone = invoice.status === "paid" ? "good" : invoice.status === "partial" ? "neutral" : "bad";
+  const statusLabel = invoice.status === "paid" ? "Paid" : invoice.status === "partial" ? "Partial" : "Unpaid";
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(20,20,20,0.45)", zIndex: 300, display: "flex", alignItems: "flex-start", justifyContent: "center", overflowY: "auto", padding: "40px 16px" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 20, maxWidth: 560, width: "100%", padding: 28, boxShadow: "0 30px 80px rgba(0,0,0,0.3)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
+          <div>
+            <div style={{ fontFamily: FONT.display, fontSize: 20, fontWeight: 600 }}>{invoice.number}</div>
+            <div style={{ fontSize: 12.5, color: PALETTE.inkSoft, marginTop: 2 }}>{invoice.date}{invoice.dueDate && invoice.dueDate !== invoice.date ? ` · Due ${invoice.dueDate}` : ""}</div>
+          </div>
+          <button className="pin-btn" onClick={onClose} style={{ background: PALETTE.chip, padding: 8, borderRadius: 999 }}><X size={16} /></button>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18, flexWrap: "wrap", gap: 10 }}>
+          <div>
+            <div style={{ fontSize: 11, color: PALETTE.inkSoft, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 4 }}>Bill To</div>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>{invoice.customer}</div>
+            {invoice.phone && <div style={{ fontSize: 12.5, color: PALETTE.inkSoft }}>{invoice.phone}</div>}
+            {invoice.address && <div style={{ fontSize: 12.5, color: PALETTE.inkSoft }}>{invoice.address}</div>}
+            {invoice.salesBy && <div style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 4 }}>Sales by {invoice.salesBy}</div>}
+          </div>
+          <Badge tone={statusTone}>{statusLabel}</Badge>
+        </div>
+
+        <div style={{ border: `1px solid ${PALETTE.line}`, borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
+          <table style={{ width: "100%" }}>
+            <thead><tr style={{ background: PALETTE.chip }}><Th>Item</Th><Th align="right">Qty</Th><Th align="right">Rate</Th><Th align="right">Amount</Th></tr></thead>
+            <tbody>
+              {(invoice.items || []).map((it, idx) => (
+                <tr key={idx} style={{ borderTop: `1px solid ${PALETTE.line}` }}>
+                  <Td>{it.desc}</Td>
+                  <Td align="right" mono>{it.qty}</Td>
+                  <Td align="right" mono>{fmtMoney(it.rate)}</Td>
+                  <Td align="right" mono>{fmtMoney((Number(it.qty) || 0) * (Number(it.rate) || 0))}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end", marginBottom: 18 }}>
+          <div style={{ fontSize: 13, color: PALETTE.inkSoft }}>Subtotal: <span style={{ fontFamily: FONT.mono, color: PALETTE.ink }}>{fmtMoney(invoice.total)}</span></div>
+          {paidTotal > 0 && <div style={{ fontSize: 13, color: PALETTE.inkSoft }}>Paid: <span style={{ fontFamily: FONT.mono, color: PALETTE.credit }}>{fmtMoney(paidTotal)}</span></div>}
+          <div style={{ fontSize: 16, fontWeight: 700 }}>Balance Due: <span style={{ fontFamily: FONT.mono }}>{fmtMoney(balanceDue)}</span></div>
+        </div>
+
+        {(invoice.payments || []).length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 11, color: PALETTE.inkSoft, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 6 }}>Payment History</div>
+            {invoice.payments.map((p) => (
+              <div key={p.id} style={{ fontSize: 12.5, color: PALETTE.inkSoft, display: "flex", justifyContent: "space-between", padding: "4px 0" }}>
+                <span>{p.date} · {p.method}</span>
+                <span style={{ fontFamily: FONT.mono }}>{fmtMoney(p.amount)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <PrimaryButton onClick={() => generateInvoicePDF(invoice)} style={{ width: "100%", justifyContent: "center", padding: "12px 0" }}>
+          <Download size={16} /> Download PDF
+        </PrimaryButton>
+      </div>
     </div>
   );
 }
@@ -1165,7 +1581,7 @@ function Expenses({ accounts, expenses, currentUser, onAdd, onDelete }) {
   const [note, setNote] = useState("");
 
   const expenseAccounts = accounts.filter((a) => a.type === "expense" && a.name !== "Cost of Goods Sold");
-  const cashAccounts = accounts.filter((a) => a.name.includes("Cash") || a.name.includes("Bank"));
+  const cashAccounts = accounts.filter((a) => a.type === "asset" && a.name !== "Accounts Receivable" && a.name !== "Inventory");
 
   const submit = (e) => {
     e.preventDefault();
@@ -1231,11 +1647,27 @@ function Expenses({ accounts, expenses, currentUser, onAdd, onDelete }) {
    Chart of Accounts
 --------------------------------------------------------- */
 
-function ChartOfAccounts({ accounts, balances, currentUser, onAdd, onDelete }) {
+function ChartOfAccounts({ accounts, balances, currentUser, onAdd, onAddMany, onDelete }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ code: "", name: "", type: "asset" });
   const isAdmin = currentUser.role === "admin";
   const grouped = ACCOUNT_TYPES.map((t) => ({ ...t, items: accounts.filter((a) => a.type === t.key) }));
+
+  const missingCategories = STANDARD_EXPENSE_CATEGORIES.filter(
+    (name) => !accounts.some((a) => a.name.toLowerCase() === name.toLowerCase())
+  );
+
+  const addStandardCategories = () => {
+    if (missingCategories.length === 0) return;
+    const existingExpenseCodes = accounts.filter((a) => a.type === "expense").map((a) => Number(a.code) || 0);
+    let nextCode = Math.max(5000, ...existingExpenseCodes) + 10;
+    const toAdd = missingCategories.map((name) => {
+      const acc = { code: String(nextCode), name, type: "expense" };
+      nextCode += 10;
+      return acc;
+    });
+    onAddMany(toAdd);
+  };
 
   const submit = (e) => {
     e.preventDefault();
@@ -1249,7 +1681,14 @@ function ChartOfAccounts({ accounts, balances, currentUser, onAdd, onDelete }) {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
         <PageHeader title="Chart of Accounts" subtitle="All accounts in the business and their balances" />
-        {isAdmin && <PrimaryButton onClick={() => setOpen((v) => !v)}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Account"}</PrimaryButton>}
+        {isAdmin && (
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {missingCategories.length > 0 && (
+              <GhostButton onClick={addStandardCategories}>+ Add {missingCategories.length} Standard Categories</GhostButton>
+            )}
+            <PrimaryButton onClick={() => setOpen((v) => !v)}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Account"}</PrimaryButton>
+          </div>
+        )}
       </div>
 
       {open && (
