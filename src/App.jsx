@@ -158,14 +158,26 @@ function generateInvoicePDF(invoice) {
   const summaryX = pageWidth - marginX - 200;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
+  if (invoice.discount > 0) {
+    doc.setTextColor(...INK_SOFT);
+    doc.text("Subtotal", summaryX, y);
+    doc.setTextColor(...INK);
+    doc.text(fmtMoney(invoice.subtotal != null ? invoice.subtotal : invoice.total), pageWidth - marginX, y, { align: "right" });
+    y += 17;
+    doc.setTextColor(...INK_SOFT);
+    doc.text("Discount", summaryX, y);
+    doc.setTextColor(...INK);
+    doc.text(`-${fmtMoney(invoice.discount)}`, pageWidth - marginX, y, { align: "right" });
+    y += 17;
+  }
   doc.setTextColor(...INK_SOFT);
-  doc.text("Subtotal", summaryX, y);
+  doc.text("Total", summaryX, y);
   doc.setTextColor(...INK);
   doc.text(fmtMoney(invoice.total), pageWidth - marginX, y, { align: "right" });
   y += 17;
   if (paidTotal > 0) {
     doc.setTextColor(...INK_SOFT);
-    doc.text("Paid", summaryX, y);
+    doc.text("Deposit / Paid", summaryX, y);
     doc.setTextColor(...INK);
     doc.text(fmtMoney(paidTotal), pageWidth - marginX, y, { align: "right" });
     y += 17;
@@ -173,7 +185,7 @@ function generateInvoicePDF(invoice) {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(13);
   doc.setTextColor(...ACCENT);
-  doc.text("Balance Due", summaryX, y);
+  doc.text("Remaining Due", summaryX, y);
   doc.text(fmtMoney(balanceDue), pageWidth - marginX, y, { align: "right" });
   y += 34;
 
@@ -610,8 +622,7 @@ export default function App() {
         {tab === "invoices" && (
           <Invoices
             accounts={accounts} products={products} invoices={invoices} currentUser={currentUser}
-            onAdd={async (invoice, journalEntry, qtyChanges, advanceInfo) => {
-              const je = { ...journalEntry, id: uid("je"), createdBy: currentUser.name };
+            onAdd={async (invoice, cogsJournalEntry, qtyChanges, depositInfo) => {
               if (qtyChanges.length) {
                 const nextProducts = products.map((p) => {
                   const chg = qtyChanges.find((c) => c.productId === p.id);
@@ -620,23 +631,28 @@ export default function App() {
                 });
                 await persistProducts(nextProducts);
               }
-              const newInvoice = { ...invoice, id: uid("inv"), journalId: je.id, createdBy: currentUser.name };
-              let journalToSave = [je, ...journal];
-              if (advanceInfo && advanceInfo.amount > 0 && advanceInfo.accountId && arAccount) {
+              const newInvoice = { ...invoice, id: uid("inv"), createdBy: currentUser.name };
+              let journalToSave = journal;
+              if (cogsJournalEntry) {
+                const je = { ...cogsJournalEntry, id: uid("je"), createdBy: currentUser.name };
+                journalToSave = [je, ...journalToSave];
+                newInvoice.journalId = je.id;
+              }
+              if (depositInfo && depositInfo.amount > 0 && depositInfo.accountId && incomeAccount) {
                 const payJe = {
-                  id: uid("je"), date: todayStr(), memo: `Advance received — Invoice ${invoice.number} (${advanceInfo.method})`,
-                  lines: [{ accountId: advanceInfo.accountId, debit: advanceInfo.amount, credit: 0 }, { accountId: arAccount.id, debit: 0, credit: advanceInfo.amount }],
+                  id: uid("je"), date: depositInfo.date || todayStr(), memo: `Deposit received — Invoice ${invoice.number} (${depositInfo.method})`,
+                  lines: [{ accountId: depositInfo.accountId, debit: depositInfo.amount, credit: 0 }, { accountId: incomeAccount.id, debit: 0, credit: depositInfo.amount }],
                   createdBy: currentUser.name, source: "invoice-payment", refId: newInvoice.id,
                 };
-                journalToSave = [payJe, je, ...journal];
-                newInvoice.payments = [{ id: uid("pay"), date: todayStr(), amount: advanceInfo.amount, accountId: advanceInfo.accountId, method: advanceInfo.method }];
-                newInvoice.status = advanceInfo.amount >= invoice.total ? "paid" : "partial";
+                journalToSave = [payJe, ...journalToSave];
+                newInvoice.payments = [{ id: uid("pay"), date: depositInfo.date || todayStr(), amount: depositInfo.amount, accountId: depositInfo.accountId, method: depositInfo.method }];
+                newInvoice.status = depositInfo.amount >= invoice.total ? "paid" : "partial";
               }
               await persistJournal(journalToSave);
               await persistInvoices([newInvoice, ...invoices]);
               showToast("Invoice created");
             }}
-            onEdit={async (invoiceId, updatedInvoice, journalEntry, oldQtyChanges, newQtyChanges) => {
+            onEdit={async (invoiceId, updatedInvoice, cogsJournalEntry, oldQtyChanges, newQtyChanges) => {
               const oldInvoice = invoices.find((i) => i.id === invoiceId);
               let nextProducts = products;
               if (oldQtyChanges.length) {
@@ -655,27 +671,32 @@ export default function App() {
               }
               if (oldQtyChanges.length || newQtyChanges.length) await persistProducts(nextProducts);
 
-              const je = { ...journalEntry, id: uid("je"), createdBy: currentUser.name };
-              const nextJournal = oldInvoice ? journal.filter((j) => j.id !== oldInvoice.journalId) : journal;
-              await persistJournal([je, ...nextJournal]);
+              let nextJournal = oldInvoice ? journal.filter((j) => j.id !== oldInvoice.journalId) : journal;
+              let newJournalId = null;
+              if (cogsJournalEntry) {
+                const je = { ...cogsJournalEntry, id: uid("je"), createdBy: currentUser.name };
+                nextJournal = [je, ...nextJournal];
+                newJournalId = je.id;
+              }
+              await persistJournal(nextJournal);
 
               const paidTotal = (oldInvoice?.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
               const status = paidTotal <= 0 ? "unpaid" : paidTotal >= updatedInvoice.total ? "paid" : "partial";
 
-              await persistInvoices(invoices.map((i) => (i.id === invoiceId ? { ...i, ...updatedInvoice, journalId: je.id, status } : i)));
+              await persistInvoices(invoices.map((i) => (i.id === invoiceId ? { ...i, ...updatedInvoice, journalId: newJournalId, status } : i)));
               showToast("Invoice updated");
             }}
-            onRecordPayment={async (invoice, amount, accountId, method) => {
+            onRecordPayment={async (invoice, amount, accountId, method, date) => {
               const je = {
-                id: uid("je"), date: todayStr(), memo: `Payment received — Invoice ${invoice.number} (${method})`,
+                id: uid("je"), date: date || todayStr(), memo: `Payment received — Invoice ${invoice.number} (${method})`,
                 lines: [
                   { accountId: accountId, debit: amount, credit: 0 },
-                  { accountId: arAccount ? arAccount.id : "", debit: 0, credit: amount },
+                  { accountId: incomeAccount ? incomeAccount.id : "", debit: 0, credit: amount },
                 ],
                 createdBy: currentUser.name, source: "invoice-payment", refId: invoice.id,
               };
               await persistJournal([je, ...journal]);
-              const payments = [...(invoice.payments || []), { id: uid("pay"), date: todayStr(), amount, accountId, method }];
+              const payments = [...(invoice.payments || []), { id: uid("pay"), date: date || todayStr(), amount, accountId, method }];
               const paidTotal = payments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
               const status = paidTotal <= 0 ? "unpaid" : paidTotal >= invoice.total ? "paid" : "partial";
               await persistInvoices(invoices.map((i) => (i.id === invoice.id ? { ...i, payments, status } : i)));
@@ -786,7 +807,7 @@ export default function App() {
           />
         )}
 
-        {tab === "reports" && <Reports accounts={accounts} balances={balances} />}
+        {tab === "reports" && <Reports accounts={accounts} balances={balances} invoices={invoices} expenses={expenses} journal={journal} />}
 
         {tab === "users" && currentUser.role === "admin" && (
           <UsersPanel
@@ -997,10 +1018,11 @@ function Dashboard({ accounts, balances, journal, products }) {
 
 function Inventory({ products, currentUser, onAdd, onDelete, onImport }) {
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", sku: "", unit: "pcs", qty: "", costPrice: "", salePrice: "", reorderLevel: "3" });
+  const [form, setForm] = useState({ name: "", sku: "", unit: "pcs", qty: "", costPrice: "", salePrice: "", reorderLevel: "3", photo: "" });
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState("");
   const [search, setSearch] = useState("");
+  const [photoBusy, setPhotoBusy] = useState(false);
   const isAdmin = currentUser.role === "admin";
 
   const filteredProducts = products.filter((p) => {
@@ -1009,15 +1031,39 @@ function Inventory({ products, currentUser, onAdd, onDelete, onImport }) {
     return p.name.toLowerCase().includes(q) || (p.sku || "").toLowerCase().includes(q);
   });
 
+  const handlePhoto = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    setPhotoBusy(true);
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const img = new Image();
+      img.onload = () => {
+        const maxDim = 480;
+        let { width, height } = img;
+        if (width > height && width > maxDim) { height = Math.round((height * maxDim) / width); width = maxDim; }
+        else if (height > maxDim) { width = Math.round((width * maxDim) / height); height = maxDim; }
+        const canvas = document.createElement("canvas");
+        canvas.width = width; canvas.height = height;
+        canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.72);
+        setForm((f) => ({ ...f, photo: dataUrl }));
+        setPhotoBusy(false);
+      };
+      img.src = evt.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+
   const submit = (e) => {
     e.preventDefault();
     if (!form.name.trim()) return;
     onAdd({
       name: form.name.trim(), sku: form.sku.trim(), unit: form.unit.trim() || "pcs",
       qty: Number(form.qty) || 0, costPrice: Number(form.costPrice) || 0, salePrice: Number(form.salePrice) || 0,
-      reorderLevel: Number(form.reorderLevel) || 3,
+      reorderLevel: Number(form.reorderLevel) || 3, photo: form.photo || "",
     });
-    setForm({ name: "", sku: "", unit: "pcs", qty: "", costPrice: "", salePrice: "", reorderLevel: "3" });
+    setForm({ name: "", sku: "", unit: "pcs", qty: "", costPrice: "", salePrice: "", reorderLevel: "3", photo: "" });
     setOpen(false);
   };
 
@@ -1108,6 +1154,21 @@ function Inventory({ products, currentUser, onAdd, onDelete, onImport }) {
       {open && (
         <Card style={{ marginBottom: 22 }}>
           <form onSubmit={submit} className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 110px", gap: 12 }}>
+            <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 14 }}>
+              <div style={{ width: 64, height: 64, borderRadius: 14, overflow: "hidden", background: PALETTE.chip, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                {form.photo ? <img src={form.photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <Package size={22} color={PALETTE.inkSoft} />}
+              </div>
+              <div>
+                <label className="pin-btn" style={{
+                  display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.08)", color: PALETTE.ink,
+                  padding: "8px 14px", borderRadius: 999, fontSize: 12.5, fontWeight: 600, border: `1px solid ${PALETTE.line}`, cursor: "pointer",
+                }}>
+                  {photoBusy ? "Processing…" : form.photo ? "Change Photo" : "Add Photo (optional)"}
+                  <input type="file" accept="image/*" onChange={handlePhoto} style={{ display: "none" }} />
+                </label>
+                {form.photo && <GhostButton onClick={() => setForm({ ...form, photo: "" })} style={{ marginLeft: 8 }}>Remove</GhostButton>}
+              </div>
+            </div>
             <div><label style={labelStyle}>Product Name</label><input style={inputStyle} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Blue Cotton Dress" /></div>
             <div><label style={labelStyle}>SKU (optional)</label><input style={inputStyle} value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} placeholder="SKU-001" /></div>
             <div><label style={labelStyle}>Unit</label><input style={inputStyle} value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="pcs" /></div>
@@ -1143,9 +1204,15 @@ function Inventory({ products, currentUser, onAdd, onDelete, onImport }) {
             const out = (Number(p.qty) || 0) <= 0;
             return (
               <Card key={p.id} style={{ padding: 0, overflow: "hidden" }}>
-                <div style={{ height: 84, background: `linear-gradient(135deg, ${colorFor(p.name)}, ${colorFor(p.name + "x")})`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 30, fontWeight: 700, fontFamily: FONT.display }}>
-                  {p.name.slice(0, 1).toUpperCase()}
-                </div>
+                {p.photo ? (
+                  <div style={{ height: 140, overflow: "hidden" }}>
+                    <img src={p.photo} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                  </div>
+                ) : (
+                  <div style={{ height: 84, background: `linear-gradient(135deg, ${colorFor(p.name)}, ${colorFor(p.name + "x")})`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 30, fontWeight: 700, fontFamily: FONT.display }}>
+                    {p.name.slice(0, 1).toUpperCase()}
+                  </div>
+                )}
                 <div style={{ padding: 16 }}>
                   <div style={{ fontWeight: 600, fontSize: 14.5, marginBottom: 2 }}>{p.name}</div>
                   <div style={{ fontSize: 11.5, color: PALETTE.inkSoft, marginBottom: 10 }}>{p.sku || "No SKU"}</div>
@@ -1318,24 +1385,22 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onEdit, on
   const [date, setDate] = useState(todayStr());
   const [dueDate, setDueDate] = useState(todayStr());
   const [items, setItems] = useState([{ productId: "", desc: "", qty: 1, rate: "" }]);
-  const [advance, setAdvance] = useState("");
-  const [advanceAccount, setAdvanceAccount] = useState("");
-  const [advanceMethod, setAdvanceMethod] = useState("Cash");
-  const [payFor, setPayFor] = useState(null);
-  const [payAmount, setPayAmount] = useState("");
-  const [payAccount, setPayAccount] = useState("");
-  const [payMethod, setPayMethod] = useState("Cash");
+  const [discount, setDiscount] = useState("");
+  const [deposit, setDeposit] = useState("");
+  const [depositAccount, setDepositAccount] = useState("");
+  const [depositMethod, setDepositMethod] = useState("Cash");
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState("");
   const [viewingInvoice, setViewingInvoice] = useState(null);
+  const [payingInvoice, setPayingInvoice] = useState(null);
 
   const incomeAccount = accounts.find((a) => a.type === "income");
-  const arAccount = accounts.find((a) => a.name === "Accounts Receivable");
   const inventoryAccount = accounts.find((a) => a.name === "Inventory");
   const cogsAccount = accounts.find((a) => a.name === "Cost of Goods Sold");
   const cashAccounts = accounts.filter((a) => a.type === "asset" && a.name !== "Accounts Receivable" && a.name !== "Inventory");
 
-  const total = items.reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.rate) || 0), 0);
+  const subtotal = items.reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.rate) || 0), 0);
+  const total = Math.max(subtotal - (Number(discount) || 0), 0);
 
   const updateItem = (i, field, value) => {
     const next = [...items];
@@ -1354,7 +1419,8 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onEdit, on
     setSalesBy(inv.salesBy || ""); setMedia(inv.media || "Facebook");
     setDate(inv.date || todayStr()); setDueDate(inv.dueDate || todayStr());
     setItems(inv.items && inv.items.length ? inv.items.map((it) => ({ ...it })) : [{ productId: "", desc: "", qty: 1, rate: "" }]);
-    setAdvance(""); setAdvanceAccount("");
+    setDiscount(inv.discount ? String(inv.discount) : "");
+    setDeposit(""); setDepositAccount("");
     setOpen(true);
     setViewingInvoice(null);
   };
@@ -1364,49 +1430,11 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onEdit, on
     setEditingInvoice(null);
     setCustomer(""); setPhone(""); setAddress(""); setSalesBy(""); setMedia("Facebook");
     setItems([{ productId: "", desc: "", qty: 1, rate: "" }]);
-    setAdvance(""); setAdvanceAccount("");
+    setDiscount(""); setDeposit(""); setDepositAccount("");
   };
 
-  const submit = (e) => {
-    e.preventDefault();
-    if (!customer.trim() || total <= 0 || !arAccount || !incomeAccount) return;
-    const cleanItems = items.filter((it) => it.desc.trim() && (Number(it.qty) || 0) > 0);
-
-    if (editingInvoice) {
-      const lines = [{ accountId: arAccount.id, debit: total, credit: 0 }, { accountId: incomeAccount.id, debit: 0, credit: total }];
-      const oldQtyChanges = (editingInvoice.items || []).filter((it) => it.productId).map((it) => ({ productId: it.productId, qty: Number(it.qty) || 0 }));
-      const newQtyChanges = [];
-      let totalCogs = 0;
-      cleanItems.forEach((it) => {
-        if (it.productId) {
-          const p = products.find((pr) => pr.id === it.productId);
-          if (p) {
-            totalCogs += (Number(it.qty) || 0) * (Number(p.costPrice) || 0);
-            newQtyChanges.push({ productId: it.productId, qty: Number(it.qty) || 0 });
-          }
-        }
-      });
-      if (totalCogs > 0 && inventoryAccount && cogsAccount) {
-        lines.push({ accountId: cogsAccount.id, debit: totalCogs, credit: 0 });
-        lines.push({ accountId: inventoryAccount.id, debit: 0, credit: totalCogs });
-      }
-      const journalEntry = { date, memo: `Invoice ${editingInvoice.number} — ${customer.trim()}`, lines, source: "invoice" };
-      const updatedInvoice = {
-        customer: customer.trim(), phone: phone.trim(), address: address.trim(), salesBy: salesBy.trim(), media,
-        date, dueDate, items: cleanItems, total,
-      };
-      onEdit(editingInvoice.id, updatedInvoice, journalEntry, oldQtyChanges, newQtyChanges);
-      cancelForm();
-      return;
-    }
-
-    const number = `INV-${String(invoices.length + 1).padStart(4, "0")}`;
-    const invoice = {
-      number, customer: customer.trim(), phone: phone.trim(), address: address.trim(), salesBy: salesBy.trim(), media,
-      date, dueDate, items: cleanItems, total, payments: [], status: "unpaid",
-    };
-
-    const lines = [{ accountId: arAccount.id, debit: total, credit: 0 }, { accountId: incomeAccount.id, debit: 0, credit: total }];
+  const buildCogs = (cleanItems) => {
+    const lines = [];
     const qtyChanges = [];
     let totalCogs = 0;
     cleanItems.forEach((it) => {
@@ -1422,9 +1450,38 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onEdit, on
       lines.push({ accountId: cogsAccount.id, debit: totalCogs, credit: 0 });
       lines.push({ accountId: inventoryAccount.id, debit: 0, credit: totalCogs });
     }
+    return { lines, qtyChanges, totalCogs };
+  };
 
-    const journalEntry = { date, memo: `Invoice ${number} — ${customer.trim()}`, lines, source: "invoice" };
-    onAdd(invoice, journalEntry, qtyChanges, Number(advance) > 0 ? { amount: Number(advance), accountId: advanceAccount, method: advanceMethod } : null);
+  const submit = (e) => {
+    e.preventDefault();
+    if (!customer.trim() || total <= 0) return;
+    const cleanItems = items.filter((it) => it.desc.trim() && (Number(it.qty) || 0) > 0);
+    const discountAmt = Number(discount) || 0;
+
+    if (editingInvoice) {
+      const { lines, qtyChanges: newQtyChanges } = buildCogs(cleanItems);
+      const oldQtyChanges = (editingInvoice.items || []).filter((it) => it.productId).map((it) => ({ productId: it.productId, qty: Number(it.qty) || 0 }));
+      const cogsJournalEntry = lines.length > 0 ? { date, memo: `COGS — Invoice ${editingInvoice.number}`, lines, source: "invoice-cogs" } : null;
+      const updatedInvoice = {
+        customer: customer.trim(), phone: phone.trim(), address: address.trim(), salesBy: salesBy.trim(), media,
+        date, dueDate, items: cleanItems, subtotal, discount: discountAmt, total,
+      };
+      onEdit(editingInvoice.id, updatedInvoice, cogsJournalEntry, oldQtyChanges, newQtyChanges);
+      cancelForm();
+      return;
+    }
+
+    const number = `INV-${String(invoices.length + 1).padStart(4, "0")}`;
+    const invoice = {
+      number, customer: customer.trim(), phone: phone.trim(), address: address.trim(), salesBy: salesBy.trim(), media,
+      date, dueDate, items: cleanItems, subtotal, discount: discountAmt, total, payments: [], status: "unpaid",
+    };
+    const { lines, qtyChanges } = buildCogs(cleanItems);
+    const cogsJournalEntry = lines.length > 0 ? { date, memo: `COGS — Invoice ${number}`, lines, source: "invoice-cogs" } : null;
+
+    const depositAmt = Number(deposit) || 0;
+    onAdd(invoice, cogsJournalEntry, qtyChanges, depositAmt > 0 ? { amount: depositAmt, accountId: depositAccount, method: depositMethod, date } : null);
     cancelForm();
   };
 
@@ -1495,24 +1552,15 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onEdit, on
             salesBy: String(pick(row, ["Sales By"]) || "").trim(),
             date: rowDate, dueDate: rowDate,
             items: [{ productId: null, desc, qty, rate }],
-            total: rowTotal, payments, status,
+            subtotal: rowTotal, discount: 0, total: rowTotal, payments, status,
             createdBy: currentUser.name, historical: true,
           };
 
-          if (arAccount && incomeAccount) {
-            const revJe = {
-              id: uid("je"), date: rowDate, memo: `Invoice ${number} — ${customerName} (imported)`,
-              lines: [{ accountId: arAccount.id, debit: rowTotal, credit: 0 }, { accountId: incomeAccount.id, debit: 0, credit: rowTotal }],
-              createdBy: currentUser.name, source: "invoice", refId: invoice.id,
-            };
-            newJournalEntries.push(revJe);
-            invoice.journalId = revJe.id;
-          }
           payments.forEach((p) => {
-            if (!p.accountId || !arAccount) return;
+            if (!p.accountId || !incomeAccount) return;
             newJournalEntries.push({
               id: uid("je"), date: p.date, memo: `Payment received — Invoice ${number} (imported)`,
-              lines: [{ accountId: p.accountId, debit: p.amount, credit: 0 }, { accountId: arAccount.id, debit: 0, credit: p.amount }],
+              lines: [{ accountId: p.accountId, debit: p.amount, credit: 0 }, { accountId: incomeAccount.id, debit: 0, credit: p.amount }],
               createdBy: currentUser.name, source: "invoice-payment", refId: invoice.id,
             });
           });
@@ -1524,7 +1572,7 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onEdit, on
           setImportMsg('No sales rows found. Make sure the sheet has "Customer Name", "Qty", "Unit Price"/"Price" columns.');
         } else {
           const ok = window.confirm(
-            `${newInvoices.length} past sales found. These will be added as historical invoices for your records — inventory stock will NOT be changed. Continue?`
+            `${newInvoices.length} past sales found. Only amounts actually received (advance/payment) will be added to income — unpaid balances stay on record but won't affect your books. Inventory stock will NOT be changed. Continue?`
           );
           if (ok) onBulkImport({ newInvoices, newJournalEntries });
         }
@@ -1607,16 +1655,28 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onEdit, on
               <GhostButton onClick={() => setItems([...items, { productId: "", desc: "", qty: 1, rate: "" }])}>+ Add another item</GhostButton>
             </div>
 
+            <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "160px 1fr", gap: 10, marginTop: 14 }}>
+              <div><label style={labelStyle}>Discount (BDT, optional)</label><input style={inputStyle} type="number" value={discount} onChange={(e) => setDiscount(e.target.value)} placeholder="0" /></div>
+              <div />
+            </div>
+
             {!editingInvoice && (
-              <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "160px 1fr 1fr", gap: 10, marginTop: 14 }}>
-                <div><label style={labelStyle}>Advance Received (optional)</label><input style={inputStyle} type="number" value={advance} onChange={(e) => setAdvance(e.target.value)} placeholder="0" /></div>
-                <div><label style={labelStyle}>Advance Method</label><select style={inputStyle} value={advanceMethod} onChange={(e) => setAdvanceMethod(e.target.value)}>{PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}</select></div>
-                <div><label style={labelStyle}>Deposit To</label><select style={inputStyle} value={advanceAccount} onChange={(e) => setAdvanceAccount(e.target.value)}><option value="">Select</option>{cashAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+              <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "160px 1fr 1fr", gap: 10, marginTop: 10 }}>
+                <div><label style={labelStyle}>Deposit Received (optional)</label><input style={inputStyle} type="number" value={deposit} onChange={(e) => setDeposit(e.target.value)} placeholder="0" /></div>
+                <div><label style={labelStyle}>Deposit Method</label><select style={inputStyle} value={depositMethod} onChange={(e) => setDepositMethod(e.target.value)}>{PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}</select></div>
+                <div><label style={labelStyle}>Deposit To</label><select style={inputStyle} value={depositAccount} onChange={(e) => setDepositAccount(e.target.value)}><option value="">Select</option>{cashAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
               </div>
             )}
 
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16 }}>
-              <div style={{ fontFamily: FONT.mono, fontSize: 16 }}>Total: {fmtMoney(total)}</div>
+            <div style={{ marginTop: 18, borderTop: `1px solid ${PALETTE.line}`, paddingTop: 14, display: "flex", flexDirection: "column", gap: 5, alignItems: "flex-end" }}>
+              <div style={{ fontSize: 13, color: PALETTE.inkSoft }}>Subtotal: <span style={{ fontFamily: FONT.mono, color: PALETTE.ink }}>{fmtMoney(subtotal)}</span></div>
+              {Number(discount) > 0 && <div style={{ fontSize: 13, color: PALETTE.inkSoft }}>Discount: <span style={{ fontFamily: FONT.mono, color: PALETTE.debit }}>-{fmtMoney(discount)}</span></div>}
+              <div style={{ fontSize: 16, fontWeight: 700 }}>Total: <span style={{ fontFamily: FONT.mono }}>{fmtMoney(total)}</span></div>
+              {!editingInvoice && Number(deposit) > 0 && <div style={{ fontSize: 13, color: PALETTE.inkSoft }}>Deposit: <span style={{ fontFamily: FONT.mono, color: PALETTE.credit }}>{fmtMoney(deposit)}</span></div>}
+              {!editingInvoice && Number(deposit) > 0 && <div style={{ fontSize: 14, fontWeight: 600, color: PALETTE.accent }}>Remaining Due: <span style={{ fontFamily: FONT.mono }}>{fmtMoney(Math.max(total - (Number(deposit) || 0), 0))}</span></div>}
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
               <PrimaryButton type="submit">{editingInvoice ? "Save Changes" : "Create Invoice"}</PrimaryButton>
             </div>
           </form>
@@ -1649,21 +1709,7 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onEdit, on
                     <Td>
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                         {inv.status !== "paid" && (
-                          payFor === inv.id ? (
-                            <>
-                              <input style={{ ...inputStyle, padding: "4px 6px", fontSize: 12, width: 90 }} type="number" placeholder="Amount" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
-                              <select style={{ ...inputStyle, padding: "4px 6px", fontSize: 12, width: "auto" }} value={payMethod} onChange={(e) => setPayMethod(e.target.value)}>
-                                {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
-                              </select>
-                              <select style={{ ...inputStyle, padding: "4px 6px", fontSize: 12, width: "auto" }} value={payAccount} onChange={(e) => setPayAccount(e.target.value)}>
-                                <option value="">Deposit to…</option>
-                                {cashAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-                              </select>
-                              <button className="pin-btn" disabled={!payAccount || !(Number(payAmount) > 0)} onClick={() => { onRecordPayment(inv, Number(payAmount), payAccount, payMethod); setPayFor(null); setPayAccount(""); setPayAmount(""); setPayMethod("Cash"); }} style={{ background: PALETTE.credit, color: "#fff", fontSize: 12, padding: "5px 10px", borderRadius: 999, opacity: (payAccount && Number(payAmount) > 0) ? 1 : 0.5 }}>Confirm</button>
-                            </>
-                          ) : (
-                            <GhostButton onClick={() => { setPayFor(inv.id); setPayAmount(String(balanceDue > 0 ? balanceDue : "")); }}>Record Payment</GhostButton>
-                          )
+                          <GhostButton onClick={() => setPayingInvoice(inv)}>Receive Payment</GhostButton>
                         )}
                         {currentUser.role === "admin" && (
                           <>
@@ -1681,12 +1727,81 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onEdit, on
         )}
       </Card>
 
-      {viewingInvoice && <InvoiceDetailModal invoice={viewingInvoice} onClose={() => setViewingInvoice(null)} onEdit={currentUser.role === "admin" ? () => startEditInvoice(viewingInvoice) : null} />}
+      {viewingInvoice && (
+        <InvoiceDetailModal
+          invoice={viewingInvoice}
+          onClose={() => setViewingInvoice(null)}
+          onEdit={currentUser.role === "admin" ? () => startEditInvoice(viewingInvoice) : null}
+          onReceivePayment={viewingInvoice.status !== "paid" ? () => { setPayingInvoice(viewingInvoice); setViewingInvoice(null); } : null}
+        />
+      )}
+      {payingInvoice && (
+        <ReceivePaymentPage
+          invoice={payingInvoice}
+          cashAccounts={cashAccounts}
+          onClose={() => setPayingInvoice(null)}
+          onConfirm={(amount, accountId, method, payDate) => {
+            onRecordPayment(payingInvoice, amount, accountId, method, payDate);
+            setPayingInvoice(null);
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function InvoiceDetailModal({ invoice, onClose, onEdit }) {
+function ReceivePaymentPage({ invoice, cashAccounts, onClose, onConfirm }) {
+  const paidTotal = (invoice.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  const balanceDue = Math.max(invoice.total - paidTotal, 0);
+  const [amount, setAmount] = useState(String(balanceDue));
+  const [accountId, setAccountId] = useState("");
+  const [method, setMethod] = useState("Cash");
+  const [payDate, setPayDate] = useState(todayStr());
+
+  const submit = (e) => {
+    e.preventDefault();
+    const amt = Number(amount);
+    if (!(amt > 0) || !accountId) return;
+    onConfirm(amt, accountId, method, payDate);
+  };
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(20,20,20,0.5)", zIndex: 320, display: "flex", alignItems: "flex-start", justifyContent: "center", overflowY: "auto", padding: "40px 16px" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: PALETTE.cardSolid, border: `1px solid ${PALETTE.line}`, borderRadius: 20, maxWidth: 440, width: "100%", padding: 28, boxShadow: "0 30px 80px rgba(0,0,0,0.5)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+          <div style={{ fontFamily: FONT.display, fontSize: 19, fontWeight: 600 }}>Receive Payment</div>
+          <button className="pin-btn" onClick={onClose} style={{ background: PALETTE.chip, padding: 8, borderRadius: 999 }}><X size={16} /></button>
+        </div>
+        <p style={{ fontSize: 13, color: PALETTE.inkSoft, marginTop: 0, marginBottom: 20 }}>{invoice.number} — {invoice.customer}</p>
+
+        <Card style={{ marginBottom: 18, padding: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: PALETTE.inkSoft, marginBottom: 4 }}><span>Total</span><span style={{ fontFamily: FONT.mono, color: PALETTE.ink }}>{fmtMoney(invoice.total)}</span></div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: PALETTE.inkSoft, marginBottom: 4 }}><span>Already Paid</span><span style={{ fontFamily: FONT.mono, color: PALETTE.credit }}>{fmtMoney(paidTotal)}</span></div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 700, marginTop: 6 }}><span>Remaining Due</span><span style={{ fontFamily: FONT.mono, color: PALETTE.accent }}>{fmtMoney(balanceDue)}</span></div>
+        </Card>
+
+        <form onSubmit={submit}>
+          <label style={labelStyle}>Payment Date</label>
+          <input type="date" style={inputStyle} value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+          <label style={labelStyle}>Amount Received (BDT)</label>
+          <input type="number" style={inputStyle} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" />
+          <label style={labelStyle}>Method</label>
+          <select style={inputStyle} value={method} onChange={(e) => setMethod(e.target.value)}>{PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}</select>
+          <label style={labelStyle}>Received Into (Account)</label>
+          <select style={inputStyle} value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+            <option value="">Select account</option>
+            {cashAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+          <PrimaryButton type="submit" style={{ width: "100%", justifyContent: "center", marginTop: 20, padding: "12px 0" }} disabled={!(Number(amount) > 0) || !accountId}>
+            Confirm Payment
+          </PrimaryButton>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function InvoiceDetailModal({ invoice, onClose, onEdit, onReceivePayment }) {
   const paidTotal = (invoice.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
   const balanceDue = invoice.total - paidTotal;
   const statusTone = invoice.status === "paid" ? "good" : invoice.status === "partial" ? "neutral" : "bad";
@@ -1735,9 +1850,15 @@ function InvoiceDetailModal({ invoice, onClose, onEdit }) {
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end", marginBottom: 18 }}>
-          <div style={{ fontSize: 13, color: PALETTE.inkSoft }}>Subtotal: <span style={{ fontFamily: FONT.mono, color: PALETTE.ink }}>{fmtMoney(invoice.total)}</span></div>
-          {paidTotal > 0 && <div style={{ fontSize: 13, color: PALETTE.inkSoft }}>Paid: <span style={{ fontFamily: FONT.mono, color: PALETTE.credit }}>{fmtMoney(paidTotal)}</span></div>}
-          <div style={{ fontSize: 16, fontWeight: 700 }}>Balance Due: <span style={{ fontFamily: FONT.mono }}>{fmtMoney(balanceDue)}</span></div>
+          {invoice.discount > 0 ? (
+            <>
+              <div style={{ fontSize: 13, color: PALETTE.inkSoft }}>Subtotal: <span style={{ fontFamily: FONT.mono, color: PALETTE.ink }}>{fmtMoney(invoice.subtotal != null ? invoice.subtotal : invoice.total)}</span></div>
+              <div style={{ fontSize: 13, color: PALETTE.inkSoft }}>Discount: <span style={{ fontFamily: FONT.mono, color: PALETTE.debit }}>-{fmtMoney(invoice.discount)}</span></div>
+            </>
+          ) : null}
+          <div style={{ fontSize: 14, color: PALETTE.inkSoft }}>Total: <span style={{ fontFamily: FONT.mono, color: PALETTE.ink }}>{fmtMoney(invoice.total)}</span></div>
+          {paidTotal > 0 && <div style={{ fontSize: 13, color: PALETTE.inkSoft }}>Deposit / Paid: <span style={{ fontFamily: FONT.mono, color: PALETTE.credit }}>{fmtMoney(paidTotal)}</span></div>}
+          <div style={{ fontSize: 16, fontWeight: 700 }}>Remaining Due: <span style={{ fontFamily: FONT.mono }}>{fmtMoney(balanceDue)}</span></div>
         </div>
 
         {(invoice.payments || []).length > 0 && (
@@ -1752,9 +1873,21 @@ function InvoiceDetailModal({ invoice, onClose, onEdit }) {
           </div>
         )}
 
-        <PrimaryButton onClick={() => generateInvoicePDF(invoice)} style={{ width: "100%", justifyContent: "center", padding: "12px 0" }}>
+        {onReceivePayment && (
+          <PrimaryButton onClick={onReceivePayment} style={{ width: "100%", justifyContent: "center", padding: "12px 0", marginBottom: 10 }}>
+            Receive Payment
+          </PrimaryButton>
+        )}
+        <button
+          type="button" className="pin-btn" onClick={() => generateInvoicePDF(invoice)}
+          style={{
+            width: "100%", justifyContent: "center", display: "flex", alignItems: "center", gap: 6,
+            background: "rgba(255,255,255,0.08)", color: PALETTE.ink, border: `1px solid ${PALETTE.line}`,
+            padding: "12px 0", borderRadius: 999, fontSize: 13.5, fontWeight: 600,
+          }}
+        >
           <Download size={16} /> Download PDF
-        </PrimaryButton>
+        </button>
       </div>
     </div>
   );
@@ -2269,7 +2402,60 @@ function Journal({ accounts, journal, currentUser, onAdd, onDelete }) {
    Reports
 --------------------------------------------------------- */
 
-function Reports({ accounts, balances }) {
+function Reports({ accounts, balances, invoices, expenses, journal }) {
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+
+  const inRange = (dateStr) => {
+    if (!dateStr) return true;
+    if (fromDate && dateStr < fromDate) return false;
+    if (toDate && dateStr > toDate) return false;
+    return true;
+  };
+
+  const monthKey = (dateStr) => (dateStr && dateStr.length >= 7 ? dateStr.slice(0, 7) : "Unknown");
+  const monthLabel = (key) => {
+    if (key === "Unknown") return "Unknown";
+    const [y, m] = key.split("-");
+    const d = new Date(Number(y), Number(m) - 1, 1);
+    return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+  };
+
+  // Sales by month — from invoice totals (what was invoiced, regardless of payment)
+  const salesByMonth = useMemo(() => {
+    const map = {};
+    invoices.filter((inv) => inRange(inv.date)).forEach((inv) => {
+      const k = monthKey(inv.date);
+      map[k] = (map[k] || 0) + (Number(inv.total) || 0);
+    });
+    return Object.entries(map).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [invoices, fromDate, toDate]);
+
+  // Income by month — from journal lines that credited an income-type account (cash actually received)
+  const incomeByMonth = useMemo(() => {
+    const incomeAccountIds = new Set(accounts.filter((a) => a.type === "income").map((a) => a.id));
+    const map = {};
+    journal.filter((j) => inRange(j.date)).forEach((j) => {
+      j.lines.forEach((line) => {
+        if (incomeAccountIds.has(line.accountId)) {
+          const k = monthKey(j.date);
+          map[k] = (map[k] || 0) + (Number(line.credit) || 0) - (Number(line.debit) || 0);
+        }
+      });
+    });
+    return Object.entries(map).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [journal, accounts, fromDate, toDate]);
+
+  // Expense by month
+  const expenseByMonth = useMemo(() => {
+    const map = {};
+    expenses.filter((e) => inRange(e.date)).forEach((e) => {
+      const k = monthKey(e.date);
+      map[k] = (map[k] || 0) + (Number(e.amount) || 0);
+    });
+    return Object.entries(map).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [expenses, fromDate, toDate]);
+
   let totalDebit = 0, totalCredit = 0;
   const rows = accounts.map((a) => {
     const bal = balances[a.id] || 0;
@@ -2280,8 +2466,50 @@ function Reports({ accounts, balances }) {
     return { ...a, debit, credit };
   });
 
+  const MonthlyCard = ({ title, subtitle, data, tone }) => {
+    const total = data.reduce((s, [, v]) => s + v, 0);
+    return (
+      <Card>
+        <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, marginBottom: 2 }}>{title}</div>
+        <div style={{ fontSize: 12, color: PALETTE.inkSoft, marginBottom: 12 }}>{subtitle}</div>
+        {data.length === 0 ? <EmptyState text="No data for this period" /> : (
+          <>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+              {data.map(([k, v]) => (
+                <div key={k} style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5 }}>
+                  <span style={{ color: PALETTE.inkSoft }}>{monthLabel(k)}</span>
+                  <span style={{ fontFamily: FONT.mono, color: PALETTE.ink }}>{fmtMoney(v)}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ borderTop: `1px solid ${PALETTE.line}`, paddingTop: 10, display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 700 }}>
+              <span>Total</span>
+              <span style={{ fontFamily: FONT.mono, color: tone === "credit" ? PALETTE.credit : tone === "debit" ? PALETTE.debit : PALETTE.ink }}>{fmtMoney(total)}</span>
+            </div>
+          </>
+        )}
+      </Card>
+    );
+  };
+
   return (
     <div>
+      <PageHeader title="Reports" subtitle="Sales, income, and expense reports by month — filter by date to customize" />
+
+      <Card style={{ marginBottom: 20, padding: 16 }}>
+        <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 10, alignItems: "end" }}>
+          <div><label style={labelStyle}>From</label><input type="date" style={inputStyle} value={fromDate} onChange={(e) => setFromDate(e.target.value)} /></div>
+          <div><label style={labelStyle}>To</label><input type="date" style={inputStyle} value={toDate} onChange={(e) => setToDate(e.target.value)} /></div>
+          {(fromDate || toDate) && <GhostButton onClick={() => { setFromDate(""); setToDate(""); }}>Clear filter</GhostButton>}
+        </div>
+      </Card>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px,1fr))", gap: 16, marginBottom: 24 }}>
+        <MonthlyCard title="Sales Report" subtitle="Total invoiced amount, by month" data={salesByMonth} tone="ink" />
+        <MonthlyCard title="Income Report" subtitle="Actual money received, by month" data={incomeByMonth} tone="credit" />
+        <MonthlyCard title="Expense Report" subtitle="Total expenses, by month" data={expenseByMonth} tone="debit" />
+      </div>
+
       <PageHeader title="Trial Balance" subtitle="Debit and credit balances for every account — the two columns should match when the books are correct" />
       <Card>
         <div style={{ overflowX: "auto" }}><table style={{ minWidth: 560 }}>
