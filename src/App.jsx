@@ -42,6 +42,16 @@ const STANDARD_EXPENSE_CATEGORIES = [
 ];
 
 const PAYMENT_METHODS = ["Cash", "Bank Transfer", "Mobile Banking (bKash/Nagad/Rocket)", "Card", "Cheque", "Other"];
+const ALL_TABS = [
+  { key: "dashboard", label: "Dashboard" },
+  { key: "invoices", label: "Invoices" },
+  { key: "bills", label: "Bills" },
+  { key: "expenses", label: "Expenses" },
+  { key: "inventory", label: "Inventory" },
+  { key: "accounts", label: "Chart of Accounts" },
+  { key: "journal", label: "Journal" },
+  { key: "reports", label: "Reports" },
+];
 const MEDIA_OPTIONS = ["Facebook", "Instagram", "TikTok", "WhatsApp", "Website", "Walk-in", "Other"];
 const PRODUCT_COLORS = ["#F4A896", "#8FBFA3", "#F2C078", "#9FB8DD", "#D9A6C2", "#B7C4A8", "#E9A178", "#A9C9D9"];
 
@@ -65,76 +75,97 @@ function generateInvoicePDF(invoice) {
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const marginX = 48;
-  let y = 56;
+  let y = 50;
 
-  // Full-page dark maroon background to match the on-screen theme
-  doc.setFillColor(43, 7, 13);
-  doc.rect(0, 0, pageWidth, pageHeight, "F");
-  const INK = [245, 237, 238];
-  const INK_SOFT = [200, 175, 178];
-  const ACCENT = [226, 76, 99];
-  const LINE = [90, 45, 52];
-  const ROW_ALT = [58, 18, 25];
+  const INK = [30, 26, 27];
+  const INK_SOFT = [120, 112, 113];
+  const ACCENT = [200, 50, 75];
+  const ACCENT_SOFT = [253, 233, 236];
+  const LINE = [225, 218, 219];
+  const ROW_ALT = [250, 246, 247];
 
+  const paidTotal = (invoice.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  const balanceDue = invoice.total - paidTotal;
+
+  // ---- Header: brand (left) + Invoice number (right) ----
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(20);
+  doc.setFontSize(16);
   doc.setTextColor(...INK);
   doc.text("Two Threads", marginX, y);
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(9.5);
+  doc.setFontSize(8.5);
   doc.setTextColor(...INK_SOFT);
-  doc.text("CRAFTED ELEGANCE, MADE YOURS", marginX, y + 16);
+  doc.text("Crafted elegance, made yours", marginX, y + 14);
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(15);
   doc.setTextColor(...ACCENT);
-  doc.text("INVOICE", pageWidth - marginX, y, { align: "right" });
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9.5);
-  doc.setTextColor(...INK_SOFT);
-  doc.text(`Invoice No: ${invoice.number}`, pageWidth - marginX, y + 18, { align: "right" });
-  if (invoice.media) doc.text(`Media: ${invoice.media}`, pageWidth - marginX, y + 32, { align: "right" });
-  doc.text(`Date: ${invoice.date || "-"}`, pageWidth - marginX, y + 46, { align: "right" });
-  if (invoice.dueDate) doc.text(`Due: ${invoice.dueDate}`, pageWidth - marginX, y + 60, { align: "right" });
+  doc.text(`Invoice ${invoice.number}`, pageWidth - marginX, y, { align: "right" });
 
-  y += 84;
-  doc.setDrawColor(...LINE);
+  y += 40;
+  doc.setDrawColor(...INK);
+  doc.setLineWidth(1.4);
   doc.line(marginX, y, pageWidth - marginX, y);
+  doc.setLineWidth(1);
   y += 26;
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10.5);
-  doc.setTextColor(...INK_SOFT);
-  doc.text("BILL TO", marginX, y);
-  y += 16;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11.5);
-  doc.setTextColor(...INK);
-  doc.text(invoice.customer || "-", marginX, y);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  doc.setTextColor(...INK_SOFT);
-  if (invoice.phone) { y += 15; doc.text(invoice.phone, marginX, y); }
-  if (invoice.address) { y += 15; doc.text(invoice.address, marginX, y, { maxWidth: 260 }); }
-  if (invoice.salesBy) { y += 15; doc.text(`Sales by: ${invoice.salesBy}`, marginX, y); }
-
-  y += 32;
+  // ---- Bill To ----
+  const billToTop = y;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
   doc.setTextColor(...INK_SOFT);
-  doc.text("PRODUCT", marginX, y);
+  doc.text("BILL TO", marginX, y);
+  y += 15;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.setTextColor(...INK);
+  doc.text(invoice.customer || "-", marginX, y);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9.5);
+  doc.setTextColor(...INK_SOFT);
+  if (invoice.address) { y += 14; doc.text(invoice.address, marginX, y, { maxWidth: 220 }); }
+  if (invoice.phone) { y += 14; doc.text(`Phone: ${invoice.phone}`, marginX, y); }
+
+  // ---- Date / Please Pay / Due Date boxes (right side) ----
+  const boxW = 96, boxH = 46, boxGap = 6;
+  const boxesRight = pageWidth - marginX;
+  const boxesLeft = boxesRight - (boxW * 3 + boxGap * 2);
+  const boxY = billToTop - 6;
+
+  const drawBox = (x, label, value, filled) => {
+    doc.setFillColor(...(filled ? ACCENT : ACCENT_SOFT));
+    doc.roundedRect(x, boxY, boxW, boxH, 4, 4, "F");
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.setTextColor(...(filled ? [255, 255, 255] : ACCENT));
+    doc.text(label, x + boxW / 2, boxY + 15, { align: "center" });
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10.5);
+    doc.text(value, x + boxW / 2, boxY + 32, { align: "center" });
+  };
+  drawBox(boxesLeft, "DATE", invoice.date || "-", false);
+  drawBox(boxesLeft + boxW + boxGap, "PLEASE PAY", fmtMoney(balanceDue), true);
+  drawBox(boxesLeft + (boxW + boxGap) * 2, "DUE DATE", invoice.dueDate || "-", false);
+
+  y = Math.max(y, boxY + boxH) + 30;
+
+  // ---- Items table ----
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.5);
+  doc.setTextColor(...INK_SOFT);
+  doc.text("DESCRIPTION", marginX, y);
   doc.text("QTY", pageWidth - marginX - 190, y, { align: "right" });
   doc.text("RATE", pageWidth - marginX - 100, y, { align: "right" });
-  doc.text("AMOUNT", pageWidth - marginX - 8, y, { align: "right" });
+  doc.text("AMOUNT", pageWidth - marginX, y, { align: "right" });
   y += 8;
-  doc.setDrawColor(...LINE);
+  doc.setDrawColor(...INK);
   doc.line(marginX, y, pageWidth - marginX, y);
-  y += 4;
+  y += 6;
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
   (invoice.items || []).forEach((it, idx) => {
-    const rowY = y + 18;
+    const rowY = y + 17;
     if (idx % 2 === 1) {
       doc.setFillColor(...ROW_ALT);
       doc.rect(marginX, y, pageWidth - marginX * 2, 24, "F");
@@ -143,76 +174,101 @@ function generateInvoicePDF(invoice) {
     doc.text(String(it.desc || ""), marginX, rowY - 3, { maxWidth: pageWidth - marginX * 2 - 220 });
     doc.text(String(it.qty), pageWidth - marginX - 190, rowY - 3, { align: "right" });
     doc.text(fmtMoney(it.rate), pageWidth - marginX - 100, rowY - 3, { align: "right" });
-    doc.text(fmtMoney((Number(it.qty) || 0) * (Number(it.rate) || 0)), pageWidth - marginX - 8, rowY - 3, { align: "right" });
+    doc.text(fmtMoney((Number(it.qty) || 0) * (Number(it.rate) || 0)), pageWidth - marginX, rowY - 3, { align: "right" });
     y += 24;
   });
-
-  y += 6;
+  y += 4;
   doc.setDrawColor(...LINE);
   doc.line(marginX, y, pageWidth - marginX, y);
-  y += 22;
+  y += 26;
 
-  const paidTotal = (invoice.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
-  const balanceDue = invoice.total - paidTotal;
+  // ---- Note (left) + Summary (right), side by side ----
+  const noteTop = y;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(...INK);
+  doc.text("Dear Customer,", marginX, y);
+  y += 13;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  doc.setTextColor(...INK_SOFT);
+  const noteLines = doc.splitTextToSize(
+    "Thank you for shopping with Two Threads. Please check your items on delivery — if anything is missing or damaged, contact us right away so we can help.",
+    260
+  );
+  doc.text(noteLines, marginX, y);
 
-  const summaryX = pageWidth - marginX - 200;
+  let sy = noteTop;
+  const summaryX = pageWidth - marginX - 190;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
   if (invoice.discount > 0) {
     doc.setTextColor(...INK_SOFT);
-    doc.text("Subtotal", summaryX, y);
+    doc.text("Subtotal", summaryX, sy);
     doc.setTextColor(...INK);
-    doc.text(fmtMoney(invoice.subtotal != null ? invoice.subtotal : invoice.total), pageWidth - marginX, y, { align: "right" });
-    y += 17;
+    doc.text(fmtMoney(invoice.subtotal != null ? invoice.subtotal : invoice.total), pageWidth - marginX, sy, { align: "right" });
+    sy += 17;
     doc.setTextColor(...INK_SOFT);
-    doc.text("Discount", summaryX, y);
+    doc.text("Discount", summaryX, sy);
     doc.setTextColor(...INK);
-    doc.text(`-${fmtMoney(invoice.discount)}`, pageWidth - marginX, y, { align: "right" });
-    y += 17;
+    doc.text(`-${fmtMoney(invoice.discount)}`, pageWidth - marginX, sy, { align: "right" });
+    sy += 17;
   }
   doc.setTextColor(...INK_SOFT);
-  doc.text("Total", summaryX, y);
+  doc.text("Total", summaryX, sy);
   doc.setTextColor(...INK);
-  doc.text(fmtMoney(invoice.total), pageWidth - marginX, y, { align: "right" });
-  y += 17;
+  doc.text(fmtMoney(invoice.total), pageWidth - marginX, sy, { align: "right" });
+  sy += 17;
   if (paidTotal > 0) {
     doc.setTextColor(...INK_SOFT);
-    doc.text("Deposit / Paid", summaryX, y);
+    doc.text("Deposit / Paid", summaryX, sy);
     doc.setTextColor(...INK);
-    doc.text(fmtMoney(paidTotal), pageWidth - marginX, y, { align: "right" });
-    y += 17;
+    doc.text(fmtMoney(paidTotal), pageWidth - marginX, sy, { align: "right" });
+    sy += 17;
   }
+  sy += 4;
+  doc.setDrawColor(...LINE);
+  doc.line(summaryX - 10, sy - 12, pageWidth - marginX, sy - 12);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(13);
+  doc.setFontSize(9.5);
   doc.setTextColor(...ACCENT);
-  doc.text("Remaining Due", summaryX, y);
-  doc.text(fmtMoney(balanceDue), pageWidth - marginX, y, { align: "right" });
-  y += 34;
+  doc.text("TOTAL DUE", summaryX, sy);
+  doc.setFontSize(15);
+  doc.text(fmtMoney(balanceDue), pageWidth - marginX, sy + 18, { align: "right" });
+
+  y = Math.max(noteTop + 13 + noteLines.length * 11, sy + 30) + 20;
 
   if ((invoice.payments || []).length > 0) {
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(9.5);
+    doc.setFontSize(8.5);
     doc.setTextColor(...INK_SOFT);
     doc.text("PAYMENT HISTORY", marginX, y);
-    y += 15;
+    y += 13;
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(9.5);
+    doc.setFontSize(8.5);
     invoice.payments.forEach((p) => {
       doc.text(`${p.date} — ${fmtMoney(p.amount)} (${p.method || "Payment"})`, marginX, y);
-      y += 13;
+      y += 12;
     });
+    y += 10;
   }
 
+  // ---- Footer ----
+  const footerY = Math.max(y + 30, pageHeight - 90);
   doc.setDrawColor(...LINE);
-  doc.line(marginX, pageHeight - 56, pageWidth - marginX, pageHeight - 56);
+  doc.line(marginX, footerY, pageWidth - marginX, footerY);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
-  doc.setTextColor(...INK);
-  doc.text("Two Threads", marginX, pageHeight - 36);
+  doc.setTextColor(...ACCENT);
+  doc.text("Thank you for your order!", marginX, footerY + 22);
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
+  doc.setFontSize(8);
   doc.setTextColor(...INK_SOFT);
-  doc.text("Thank you for your order", pageWidth - marginX, pageHeight - 36, { align: "right" });
+  doc.text("Two Threads", marginX, footerY + 36);
+
+  doc.setDrawColor(...INK_SOFT);
+  doc.line(pageWidth - marginX - 150, footerY + 32, pageWidth - marginX, footerY + 32);
+  doc.text("Customer Signature", pageWidth - marginX - 150, footerY + 44);
 
   doc.save(`${invoice.number}.pdf`);
 }
@@ -491,6 +547,14 @@ export default function App() {
     return map;
   }, [accounts, journal]);
 
+  useEffect(() => {
+    if (!currentUser) return;
+    if (tab === "users" && currentUser.role !== "admin") { setTab("dashboard"); return; }
+    if (currentUser.role !== "admin" && Array.isArray(currentUser.permissions) && !currentUser.permissions.includes(tab)) {
+      setTab("dashboard");
+    }
+  }, [tab, currentUser]);
+
   if (booting) {
     return (
       <div style={styles.bootScreen}>
@@ -518,8 +582,9 @@ export default function App() {
           const admin = { id: uid("usr"), name, pin, role: "admin" };
           await persistUsers([admin]);
           setCurrentUser(admin);
+          setTab("dashboard");
         }}
-        onLogin={(u) => setCurrentUser(u)}
+        onLogin={(u) => { setCurrentUser(u); setTab("dashboard"); }}
       />
     );
   }
@@ -566,6 +631,7 @@ export default function App() {
           <Inventory
             products={products} currentUser={currentUser}
             onAdd={async (p) => { await persistProducts([{ ...p, id: uid("prod") }, ...products]); showToast("Product added"); }}
+            onEdit={async (id, updates) => { await persistProducts(products.map((p) => (p.id === id ? { ...p, ...updates } : p))); showToast("Product updated"); }}
             onDelete={async (id) => { await persistProducts(products.filter((p) => p.id !== id)); showToast("Product deleted"); }}
             onImport={async (rows) => {
               const withIds = rows.map((p) => ({ ...p, id: uid("prod") }));
@@ -813,6 +879,7 @@ export default function App() {
           <UsersPanel
             users={users}
             onAdd={async (u) => { await persistUsers([...users, { ...u, id: uid("usr") }]); showToast("User added"); }}
+            onEdit={async (id, updates) => { await persistUsers(users.map((u) => (u.id === id ? { ...u, ...updates } : u))); showToast("User updated"); }}
             onDelete={async (id) => { if (id === currentUser.id) return; await persistUsers(users.filter((u) => u.id !== id)); showToast("User deleted"); }}
           />
         )}
@@ -882,16 +949,11 @@ function LoginScreen({ users, onCreateFirstAdmin, onLogin }) {
 --------------------------------------------------------- */
 
 function Sidebar({ tab, setTab, currentUser, onLogout, mobileOpen, onCloseMobile }) {
-  const items = [
-    { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { key: "invoices", label: "Invoices", icon: FileText },
-    { key: "bills", label: "Bills", icon: ClipboardList },
-    { key: "expenses", label: "Expenses", icon: Wallet },
-    { key: "inventory", label: "Inventory", icon: Package },
-    { key: "accounts", label: "Chart of Accounts", icon: ScrollText },
-    { key: "journal", label: "Journal", icon: Receipt },
-    { key: "reports", label: "Reports", icon: PieChart },
-  ];
+  const iconMap = { dashboard: LayoutDashboard, invoices: FileText, bills: ClipboardList, expenses: Wallet, inventory: Package, accounts: ScrollText, journal: Receipt, reports: PieChart };
+  const allowed = currentUser.role === "admin" || !Array.isArray(currentUser.permissions)
+    ? ALL_TABS.map((t) => t.key)
+    : currentUser.permissions;
+  const items = ALL_TABS.filter((t) => allowed.includes(t.key)).map((t) => ({ ...t, icon: iconMap[t.key] }));
   if (currentUser.role === "admin") items.push({ key: "users", label: "Users", icon: User });
 
   return (
@@ -1016,8 +1078,9 @@ function Dashboard({ accounts, balances, journal, products }) {
    Inventory — Pinterest-style product grid
 --------------------------------------------------------- */
 
-function Inventory({ products, currentUser, onAdd, onDelete, onImport }) {
+function Inventory({ products, currentUser, onAdd, onEdit, onDelete, onImport }) {
   const [open, setOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState(null);
   const [form, setForm] = useState({ name: "", sku: "", unit: "pcs", qty: "", costPrice: "", salePrice: "", reorderLevel: "3", photo: "" });
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState("");
@@ -1055,16 +1118,36 @@ function Inventory({ products, currentUser, onAdd, onDelete, onImport }) {
     reader.readAsDataURL(file);
   };
 
+  const startEditProduct = (p) => {
+    setEditingProduct(p);
+    setForm({
+      name: p.name || "", sku: p.sku || "", unit: p.unit || "pcs", qty: String(p.qty ?? ""),
+      costPrice: String(p.costPrice ?? ""), salePrice: String(p.salePrice ?? ""), reorderLevel: String(p.reorderLevel ?? "3"),
+      photo: p.photo || "",
+    });
+    setOpen(true);
+  };
+
+  const cancelProductForm = () => {
+    setOpen(false);
+    setEditingProduct(null);
+    setForm({ name: "", sku: "", unit: "pcs", qty: "", costPrice: "", salePrice: "", reorderLevel: "3", photo: "" });
+  };
+
   const submit = (e) => {
     e.preventDefault();
     if (!form.name.trim()) return;
-    onAdd({
+    const payload = {
       name: form.name.trim(), sku: form.sku.trim(), unit: form.unit.trim() || "pcs",
       qty: Number(form.qty) || 0, costPrice: Number(form.costPrice) || 0, salePrice: Number(form.salePrice) || 0,
       reorderLevel: Number(form.reorderLevel) || 3, photo: form.photo || "",
-    });
-    setForm({ name: "", sku: "", unit: "pcs", qty: "", costPrice: "", salePrice: "", reorderLevel: "3", photo: "" });
-    setOpen(false);
+    };
+    if (editingProduct) {
+      onEdit(editingProduct.id, payload);
+    } else {
+      onAdd(payload);
+    }
+    cancelProductForm();
   };
 
   const pick = (row, keys) => {
@@ -1138,7 +1221,7 @@ function Inventory({ products, currentUser, onAdd, onDelete, onImport }) {
               {importing ? "Importing…" : "Import from Excel"}
               <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} style={{ display: "none" }} />
             </label>
-            <PrimaryButton onClick={() => setOpen((v) => !v)}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Product"}</PrimaryButton>
+            <PrimaryButton onClick={() => (open ? cancelProductForm() : setOpen(true))}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Product"}</PrimaryButton>
           </div>
         )}
       </div>
@@ -1153,6 +1236,7 @@ function Inventory({ products, currentUser, onAdd, onDelete, onImport }) {
 
       {open && (
         <Card style={{ marginBottom: 22 }}>
+          <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, marginBottom: 12 }}>{editingProduct ? `Editing ${editingProduct.name}` : "New Product"}</div>
           <form onSubmit={submit} className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 110px", gap: 12 }}>
             <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 14 }}>
               <div style={{ width: 64, height: 64, borderRadius: 14, overflow: "hidden", background: PALETTE.chip, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -1177,7 +1261,7 @@ function Inventory({ products, currentUser, onAdd, onDelete, onImport }) {
             <div><label style={labelStyle}>Sale Price (BDT)</label><input style={inputStyle} type="number" value={form.salePrice} onChange={(e) => setForm({ ...form, salePrice: e.target.value })} placeholder="0" /></div>
             <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "space-between", alignItems: "end" }}>
               <div style={{ maxWidth: 160 }}><label style={labelStyle}>Reorder Alert Below</label><input style={inputStyle} type="number" value={form.reorderLevel} onChange={(e) => setForm({ ...form, reorderLevel: e.target.value })} /></div>
-              <PrimaryButton type="submit">Add Product</PrimaryButton>
+              <PrimaryButton type="submit">{editingProduct ? "Save Changes" : "Add Product"}</PrimaryButton>
             </div>
           </form>
         </Card>
@@ -1219,7 +1303,10 @@ function Inventory({ products, currentUser, onAdd, onDelete, onImport }) {
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                     <Badge tone={out ? "bad" : low ? "neutral" : "good"}>{p.qty} {p.unit} in stock</Badge>
                     {isAdmin && (
-                      <button className="pin-btn" onClick={() => onDelete(p.id)} style={{ background: "transparent", color: PALETTE.debit }}><Trash2 size={14} /></button>
+                      <div style={{ display: "flex", gap: 2 }}>
+                        <button className="pin-btn" onClick={() => startEditProduct(p)} style={{ background: "transparent", color: PALETTE.inkSoft }}><Edit2 size={14} /></button>
+                        <button className="pin-btn" onClick={() => onDelete(p.id)} style={{ background: "transparent", color: PALETTE.debit }}><Trash2 size={14} /></button>
+                      </div>
                     )}
                   </div>
                   <div style={{ fontFamily: FONT.mono, fontSize: 12.5, color: PALETTE.inkSoft, display: "flex", justifyContent: "space-between" }}>
@@ -1613,67 +1700,106 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onEdit, on
 
       {open && (
         <Card style={{ marginBottom: 20 }}>
-          <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, marginBottom: 12 }}>{editingInvoice ? `Editing ${editingInvoice.number}` : "New Invoice"}</div>
-          <form onSubmit={submit}>
-            <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <div><label style={labelStyle}>Customer Name</label><input style={inputStyle} value={customer} onChange={(e) => setCustomer(e.target.value)} placeholder="Customer name" /></div>
-              <div><label style={labelStyle}>Phone (optional)</label><input style={inputStyle} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="01XXXXXXXXX" /></div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
+            <div>
+              <div style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 600 }}>{editingInvoice ? `Editing ${editingInvoice.number}` : "New Invoice"}</div>
+              <div style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 2 }}>Customer & Invoice Info — fill details, add items below</div>
             </div>
-            <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
-              <div><label style={labelStyle}>Address (optional)</label><input style={inputStyle} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Delivery address" /></div>
-              <div><label style={labelStyle}>Sales By (optional)</label><input style={inputStyle} value={salesBy} onChange={(e) => setSalesBy(e.target.value)} placeholder="Staff name" /></div>
-            </div>
-            <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 160px 160px", gap: 10, marginTop: 10 }}>
-              <div><label style={labelStyle}>Media</label><select style={inputStyle} value={media} onChange={(e) => setMedia(e.target.value)}>{MEDIA_OPTIONS.map((m) => <option key={m} value={m}>{m}</option>)}</select></div>
-              <div><label style={labelStyle}>Date</label><input type="date" style={inputStyle} value={date} onChange={(e) => setDate(e.target.value)} /></div>
-              <div><label style={labelStyle}>Due Date</label><input type="date" style={inputStyle} value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></div>
-            </div>
+            {editingInvoice && (
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 10.5, color: PALETTE.inkSoft, textTransform: "uppercase", letterSpacing: 0.4 }}>Remaining Due</div>
+                <div style={{ fontSize: 22, fontWeight: 700, fontFamily: FONT.mono, color: PALETTE.accent }}>
+                  {fmtMoney(Math.max(editingInvoice.total - (editingInvoice.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0), 0))}
+                </div>
+                {editingInvoice.status !== "paid" && (
+                  <GhostButton onClick={() => { setPayingInvoice(editingInvoice); cancelForm(); }} style={{ marginTop: 2 }}>Receive Payment →</GhostButton>
+                )}
+              </div>
+            )}
+          </div>
 
-            <div style={{ marginTop: 14 }}>
-              <label style={labelStyle}>Items</label>
+          <form onSubmit={submit}>
+            <Card style={{ padding: 16, marginBottom: 16, background: "rgba(255,255,255,0.03)" }}>
+              <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div><label style={labelStyle}>Customer Name</label><input style={inputStyle} value={customer} onChange={(e) => setCustomer(e.target.value)} placeholder="Customer name" /></div>
+                <div><label style={labelStyle}>Phone (optional)</label><input style={inputStyle} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="01XXXXXXXXX" /></div>
+              </div>
+              <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
+                <div><label style={labelStyle}>Billing Address (optional)</label><input style={inputStyle} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Delivery address" /></div>
+                <div><label style={labelStyle}>Sales By (optional)</label><input style={inputStyle} value={salesBy} onChange={(e) => setSalesBy(e.target.value)} placeholder="Staff name" /></div>
+              </div>
+              <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 10 }}>
+                <div><label style={labelStyle}>Media</label><select style={inputStyle} value={media} onChange={(e) => setMedia(e.target.value)}>{MEDIA_OPTIONS.map((m) => <option key={m} value={m}>{m}</option>)}</select></div>
+                <div><label style={labelStyle}>Invoice Date</label><input type="date" style={inputStyle} value={date} onChange={(e) => setDate(e.target.value)} /></div>
+                <div><label style={labelStyle}>Due Date</label><input type="date" style={inputStyle} value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></div>
+              </div>
+            </Card>
+
+            <div style={{ fontSize: 11, color: PALETTE.inkSoft, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Products / Services</div>
+            <div style={{ border: `1px solid ${PALETTE.line}`, borderRadius: 12, overflow: "hidden", marginBottom: 14 }}>
+              <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "160px 1fr 70px 100px 30px", gap: 8, padding: "8px 10px", background: PALETTE.chip, fontSize: 10.5, fontWeight: 700, color: PALETTE.inkSoft, textTransform: "uppercase", letterSpacing: 0.3 }}>
+                <span>Product</span><span>Description</span><span>Qty</span><span>Rate</span><span></span>
+              </div>
               {items.map((it, i) => {
                 const p = products.find((pr) => pr.id === it.productId);
                 const short = p && Number(it.qty) > Number(p.qty);
                 return (
-                  <div key={i} style={{ marginBottom: 8 }}>
-                    <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "160px 1fr 80px 120px 30px", gap: 8 }}>
+                  <div key={i} style={{ padding: "8px 10px", borderTop: `1px solid ${PALETTE.line}` }}>
+                    <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "160px 1fr 70px 100px 30px", gap: 8 }}>
                       <select style={inputStyle} value={it.productId} onChange={(e) => updateItem(i, "productId", e.target.value)}>
-                        <option value="">Other (no stock)</option>
+                        <option value="">Other</option>
                         {products.map((pr) => <option key={pr.id} value={pr.id}>{pr.name}</option>)}
                       </select>
                       <input style={inputStyle} placeholder="Description" value={it.desc} onChange={(e) => updateItem(i, "desc", e.target.value)} disabled={!!it.productId} />
                       <input style={inputStyle} type="number" placeholder="Qty" value={it.qty} onChange={(e) => updateItem(i, "qty", e.target.value)} />
-                      <input style={inputStyle} type="number" placeholder="Rate (BDT)" value={it.rate} onChange={(e) => updateItem(i, "rate", e.target.value)} />
+                      <input style={inputStyle} type="number" placeholder="Rate" value={it.rate} onChange={(e) => updateItem(i, "rate", e.target.value)} />
                       {items.length > 1 && <button type="button" className="pin-btn" onClick={() => setItems(items.filter((_, idx) => idx !== i))} style={{ background: "transparent", color: PALETTE.debit }}><Trash2 size={14} /></button>}
                     </div>
-                    {p && <div style={{ fontSize: 11.5, color: short ? PALETTE.debit : PALETTE.inkSoft, marginTop: 3, marginLeft: 2 }}>
+                    {p && <div style={{ fontSize: 11, color: short ? PALETTE.debit : PALETTE.inkSoft, marginTop: 4 }}>
                       {p.qty} {p.unit} in stock{short ? " — not enough stock, this will oversell" : ""}
                     </div>}
                   </div>
                 );
               })}
-              <GhostButton onClick={() => setItems([...items, { productId: "", desc: "", qty: 1, rate: "" }])}>+ Add another item</GhostButton>
-            </div>
-
-            <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "160px 1fr", gap: 10, marginTop: 14 }}>
-              <div><label style={labelStyle}>Discount (BDT, optional)</label><input style={inputStyle} type="number" value={discount} onChange={(e) => setDiscount(e.target.value)} placeholder="0" /></div>
-              <div />
-            </div>
-
-            {!editingInvoice && (
-              <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "160px 1fr 1fr", gap: 10, marginTop: 10 }}>
-                <div><label style={labelStyle}>Deposit Received (optional)</label><input style={inputStyle} type="number" value={deposit} onChange={(e) => setDeposit(e.target.value)} placeholder="0" /></div>
-                <div><label style={labelStyle}>Deposit Method</label><select style={inputStyle} value={depositMethod} onChange={(e) => setDepositMethod(e.target.value)}>{PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}</select></div>
-                <div><label style={labelStyle}>Deposit To</label><select style={inputStyle} value={depositAccount} onChange={(e) => setDepositAccount(e.target.value)}><option value="">Select</option>{cashAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+              <div style={{ padding: "8px 10px", borderTop: `1px solid ${PALETTE.line}` }}>
+                <GhostButton onClick={() => setItems([...items, { productId: "", desc: "", qty: 1, rate: "" }])}>+ Add line</GhostButton>
               </div>
-            )}
+            </div>
 
-            <div style={{ marginTop: 18, borderTop: `1px solid ${PALETTE.line}`, paddingTop: 14, display: "flex", flexDirection: "column", gap: 5, alignItems: "flex-end" }}>
-              <div style={{ fontSize: 13, color: PALETTE.inkSoft }}>Subtotal: <span style={{ fontFamily: FONT.mono, color: PALETTE.ink }}>{fmtMoney(subtotal)}</span></div>
-              {Number(discount) > 0 && <div style={{ fontSize: 13, color: PALETTE.inkSoft }}>Discount: <span style={{ fontFamily: FONT.mono, color: PALETTE.debit }}>-{fmtMoney(discount)}</span></div>}
-              <div style={{ fontSize: 16, fontWeight: 700 }}>Total: <span style={{ fontFamily: FONT.mono }}>{fmtMoney(total)}</span></div>
-              {!editingInvoice && Number(deposit) > 0 && <div style={{ fontSize: 13, color: PALETTE.inkSoft }}>Deposit: <span style={{ fontFamily: FONT.mono, color: PALETTE.credit }}>{fmtMoney(deposit)}</span></div>}
-              {!editingInvoice && Number(deposit) > 0 && <div style={{ fontSize: 14, fontWeight: 600, color: PALETTE.accent }}>Remaining Due: <span style={{ fontFamily: FONT.mono }}>{fmtMoney(Math.max(total - (Number(deposit) || 0), 0))}</span></div>}
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <Card style={{ padding: 16, width: "100%", maxWidth: 340, background: "rgba(255,255,255,0.03)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <span style={{ fontSize: 13, color: PALETTE.inkSoft }}>Subtotal</span>
+                  <span style={{ fontFamily: FONT.mono, fontSize: 13 }}>{fmtMoney(subtotal)}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8 }}>
+                  <label style={{ fontSize: 13, color: PALETTE.inkSoft }}>Discount</label>
+                  <input style={{ ...inputStyle, width: 110, padding: "6px 8px", textAlign: "right" }} type="number" value={discount} onChange={(e) => setDiscount(e.target.value)} placeholder="0" />
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${PALETTE.line}`, paddingTop: 8, marginBottom: 8 }}>
+                  <span style={{ fontSize: 15, fontWeight: 700 }}>Total</span>
+                  <span style={{ fontFamily: FONT.mono, fontSize: 16, fontWeight: 700 }}>{fmtMoney(total)}</span>
+                </div>
+
+                {!editingInvoice && (
+                  <>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8 }}>
+                      <label style={{ fontSize: 13, color: PALETTE.inkSoft }}>Deposit</label>
+                      <input style={{ ...inputStyle, width: 110, padding: "6px 8px", textAlign: "right" }} type="number" value={deposit} onChange={(e) => setDeposit(e.target.value)} placeholder="0" />
+                    </div>
+                    {Number(deposit) > 0 && (
+                      <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                        <select style={{ ...inputStyle, padding: "6px 8px", fontSize: 12.5 }} value={depositMethod} onChange={(e) => setDepositMethod(e.target.value)}>{PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}</select>
+                        <select style={{ ...inputStyle, padding: "6px 8px", fontSize: 12.5 }} value={depositAccount} onChange={(e) => setDepositAccount(e.target.value)}><option value="">Deposit to…</option>{cashAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
+                      </div>
+                    )}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${PALETTE.line}`, paddingTop: 8 }}>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: PALETTE.accent }}>Remaining Due</span>
+                      <span style={{ fontFamily: FONT.mono, fontSize: 15, fontWeight: 700, color: PALETTE.accent }}>{fmtMoney(Math.max(total - (Number(deposit) || 0), 0))}</span>
+                    </div>
+                  </>
+                )}
+              </Card>
             </div>
 
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
@@ -2536,49 +2662,115 @@ function Reports({ accounts, balances, invoices, expenses, journal }) {
    Users panel
 --------------------------------------------------------- */
 
-function UsersPanel({ users, onAdd, onDelete }) {
+function UsersPanel({ users, onAdd, onEdit, onDelete }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [pin, setPin] = useState("");
   const [role, setRole] = useState("staff");
+  const [permissions, setPermissions] = useState(ALL_TABS.map((t) => t.key));
+  const [editingId, setEditingId] = useState(null);
+  const [editRole, setEditRole] = useState("staff");
+  const [editPermissions, setEditPermissions] = useState([]);
+
+  const togglePerm = (key, list, setList) => {
+    if (key === "dashboard") return; // always included
+    setList(list.includes(key) ? list.filter((k) => k !== key) : [...list, key]);
+  };
 
   const submit = (e) => {
     e.preventDefault();
     if (!name.trim() || pin.trim().length < 4) return;
-    onAdd({ name: name.trim(), pin: pin.trim(), role });
-    setName(""); setPin(""); setRole("staff"); setOpen(false);
+    onAdd({ name: name.trim(), pin: pin.trim(), role, permissions: role === "staff" ? permissions : ALL_TABS.map((t) => t.key) });
+    setName(""); setPin(""); setRole("staff"); setPermissions(ALL_TABS.map((t) => t.key)); setOpen(false);
   };
+
+  const startEdit = (u) => {
+    setEditingId(u.id);
+    setEditRole(u.role);
+    setEditPermissions(Array.isArray(u.permissions) ? u.permissions : ALL_TABS.map((t) => t.key));
+  };
+  const saveEdit = (id) => {
+    onEdit(id, { role: editRole, permissions: editRole === "staff" ? editPermissions : ALL_TABS.map((t) => t.key) });
+    setEditingId(null);
+  };
+
+  const PermGrid = ({ list, setList, disabled }) => (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px,1fr))", gap: 6, marginTop: 4 }}>
+      {ALL_TABS.map((t) => (
+        <label key={t.key} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: disabled ? PALETTE.inkSoft : PALETTE.ink, opacity: t.key === "dashboard" ? 0.6 : 1 }}>
+          <input
+            type="checkbox"
+            checked={t.key === "dashboard" ? true : list.includes(t.key)}
+            disabled={disabled || t.key === "dashboard"}
+            onChange={() => togglePerm(t.key, list, setList)}
+          />
+          {t.label}
+        </label>
+      ))}
+    </div>
+  );
 
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
-        <PageHeader title="Users" subtitle="Manage your team's access" />
+        <PageHeader title="Users" subtitle="Manage your team's access and which menus each person can see" />
         <PrimaryButton onClick={() => setOpen((v) => !v)}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New User"}</PrimaryButton>
       </div>
 
       {open && (
         <Card style={{ marginBottom: 20 }}>
-          <form onSubmit={submit} className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 140px 140px auto", gap: 10, alignItems: "end" }}>
-            <div><label style={labelStyle}>Name</label><input style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} /></div>
-            <div><label style={labelStyle}>PIN (4+ digits)</label><input style={inputStyle} value={pin} onChange={(e) => setPin(e.target.value)} /></div>
-            <div><label style={labelStyle}>Role</label><select style={inputStyle} value={role} onChange={(e) => setRole(e.target.value)}><option value="staff">Staff (limited)</option><option value="admin">Admin</option></select></div>
-            <PrimaryButton type="submit">Add</PrimaryButton>
+          <form onSubmit={submit}>
+            <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 140px 140px", gap: 10 }}>
+              <div><label style={labelStyle}>Name</label><input style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} /></div>
+              <div><label style={labelStyle}>PIN (4+ digits)</label><input style={inputStyle} value={pin} onChange={(e) => setPin(e.target.value)} /></div>
+              <div><label style={labelStyle}>Role</label><select style={inputStyle} value={role} onChange={(e) => setRole(e.target.value)}><option value="staff">Staff (limited)</option><option value="admin">Admin</option></select></div>
+            </div>
+            {role === "staff" && (
+              <div style={{ marginTop: 14 }}>
+                <label style={labelStyle}>Menu Access</label>
+                <p style={{ fontSize: 11.5, color: PALETTE.inkSoft, margin: "2px 0 4px" }}>Choose which tabs this person can see. Dashboard is always visible.</p>
+                <PermGrid list={permissions} setList={setPermissions} />
+              </div>
+            )}
+            <PrimaryButton type="submit" style={{ marginTop: 16 }}>Add User</PrimaryButton>
           </form>
         </Card>
       )}
 
       <Card>
-        <div style={{ overflowX: "auto" }}><table style={{ minWidth: 560 }}>
-          <thead><tr style={{ borderBottom: `1px solid ${PALETTE.line}` }}><Th>Name</Th><Th>Role</Th><Th> </Th></tr></thead>
-          <tbody>
-            {users.map((u) => (
-              <tr key={u.id} className="row-hover" style={{ borderBottom: `1px solid ${PALETTE.line}` }}>
-                <Td>{u.name}</Td><Td>{u.role === "admin" ? "Admin" : "Staff"}</Td>
-                <Td><button className="pin-btn" onClick={() => onDelete(u.id)} style={{ background: "transparent", color: PALETTE.debit }}><Trash2 size={14} /></button></Td>
-              </tr>
-            ))}
-          </tbody>
-        </table></div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {users.map((u) => (
+            <div key={u.id} style={{ borderBottom: `1px solid ${PALETTE.line}`, padding: "10px 0" }}>
+              {editingId === u.id ? (
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                    <span style={{ fontSize: 13.5, fontWeight: 600 }}>{u.name}</span>
+                    <select style={{ ...inputStyle, width: 140, padding: "6px 8px" }} value={editRole} onChange={(e) => setEditRole(e.target.value)}>
+                      <option value="staff">Staff (limited)</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  </div>
+                  {editRole === "staff" && <PermGrid list={editPermissions} setList={setEditPermissions} />}
+                  <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                    <button className="pin-btn" onClick={() => saveEdit(u.id)} style={{ background: PALETTE.credit, color: "#fff", fontSize: 12, padding: "6px 14px", borderRadius: 999 }}>Save</button>
+                    <button className="pin-btn" onClick={() => setEditingId(null)} style={{ background: "transparent", color: PALETTE.inkSoft, fontSize: 12 }}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 600 }}>{u.name}</div>
+                    <div style={{ fontSize: 11.5, color: PALETTE.inkSoft, marginTop: 2 }}>
+                      {u.role === "admin" ? "Admin — full access" : `Staff — ${Array.isArray(u.permissions) ? u.permissions.length : ALL_TABS.length} of ${ALL_TABS.length} menus`}
+                    </div>
+                  </div>
+                  <button className="pin-btn" onClick={() => startEdit(u)} style={{ background: "transparent", color: PALETTE.inkSoft, padding: 6 }}><Edit2 size={14} /></button>
+                  <button className="pin-btn" onClick={() => onDelete(u.id)} style={{ background: "transparent", color: PALETTE.debit, padding: 6 }}><Trash2 size={14} /></button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       </Card>
       <p style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 12 }}>Note: this PIN system is a simple access control for your 4–5 trusted team members — not banking-grade security. Don't share the link outside your team.</p>
     </div>
