@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   LayoutDashboard, FileText, Receipt, Wallet, ScrollText, Package, ClipboardList,
   Plus, Trash2, X, LogOut, ShieldCheck, User, AlertCircle,
-  CheckCircle2, Loader2, PieChart, Menu, Search, Download, Eye, Edit2
+  CheckCircle2, Loader2, PieChart, Menu, Search, Download, Eye, Edit2, TrendingUp
 } from "lucide-react";
 import { supabase } from "./supabaseClient";
 import * as XLSX from "xlsx";
@@ -32,7 +32,7 @@ const DEFAULT_ACCOUNTS = [
   { id: "acc-5990", code: "5990", name: "Cost of Goods Sold", type: "expense" },
 ];
 
-// The business's real expense categories â used to seed Chart of Accounts via the
+// The business's real expense categories — used to seed Chart of Accounts via the
 // "Add Standard Categories" quick-setup button, and for brand-new installs.
 const STANDARD_EXPENSE_CATEGORIES = [
   "Transportation", "Printing & Accessories", "Iffat Remuneration", "Raisa Remuneration",
@@ -47,6 +47,7 @@ const ALL_TABS = [
   { key: "invoices", label: "Invoices" },
   { key: "bills", label: "Bills" },
   { key: "expenses", label: "Expenses" },
+  { key: "income", label: "Income" },
   { key: "inventory", label: "Inventory" },
   { key: "accounts", label: "Chart of Accounts" },
   { key: "journal", label: "Journal" },
@@ -193,7 +194,7 @@ function generateInvoicePDF(invoice) {
   doc.setFontSize(8.5);
   doc.setTextColor(...INK_SOFT);
   const noteLines = doc.splitTextToSize(
-    "Thank you for shopping with Two Threads. Please check your items on delivery â if anything is missing or damaged, contact us right away so we can help.",
+    "Thank you for shopping with Two Threads. Please check your items on delivery — if anything is missing or damaged, contact us right away so we can help.",
     260
   );
   doc.text(noteLines, marginX, y);
@@ -247,7 +248,7 @@ function generateInvoicePDF(invoice) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8.5);
     invoice.payments.forEach((p) => {
-      doc.text(`${p.date} â ${fmtMoney(p.amount)} (${p.method || "Payment"})`, marginX, y);
+      doc.text(`${p.date} — ${fmtMoney(p.amount)} (${p.method || "Payment"})`, marginX, y);
       y += 12;
     });
     y += 10;
@@ -308,11 +309,12 @@ const KEYS = {
   expenses: "ledger-expenses-v2",
   products: "ledger-products-v2",
   bills: "ledger-bills-v2",
+  incomeEntries: "ledger-income-v2",
 };
 const SESSION_KEY = "two-threads-session-user-id";
 
 /* ---------------------------------------------------------
-   Design tokens â deep wine/maroon gradient, glass cards
+   Design tokens — deep wine/maroon gradient, glass cards
 --------------------------------------------------------- */
 
 const PALETTE = {
@@ -482,6 +484,7 @@ export default function App() {
   const [expenses, setExpenses] = useState([]);
   const [products, setProducts] = useState([]);
   const [bills, setBills] = useState([]);
+  const [incomeEntries, setIncomeEntries] = useState([]);
 
   const [currentUser, setCurrentUser] = useState(null);
   const [tab, setTab] = useState("dashboard");
@@ -491,7 +494,7 @@ export default function App() {
   useEffect(() => {
     (async () => {
       try {
-        const [u, a, j, inv, exp, prod, bl] = await Promise.all([
+        const [u, a, j, inv, exp, prod, bl, inc] = await Promise.all([
           storageGet(KEYS.users, null),
           storageGet(KEYS.accounts, null),
           storageGet(KEYS.journal, []),
@@ -499,6 +502,7 @@ export default function App() {
           storageGet(KEYS.expenses, []),
           storageGet(KEYS.products, []),
           storageGet(KEYS.bills, []),
+          storageGet(KEYS.incomeEntries, []),
         ]);
         let finalUsers = u;
         if (!finalUsers) { finalUsers = []; await storageSet(KEYS.users, finalUsers); }
@@ -512,6 +516,7 @@ export default function App() {
         setExpenses(exp || []);
         setProducts(prod || []);
         setBills(bl || []);
+        setIncomeEntries(inc || []);
 
         const savedUserId = localStorage.getItem(SESSION_KEY);
         if (savedUserId) {
@@ -539,6 +544,7 @@ export default function App() {
   const persistExpenses = async (n) => { setExpenses(n); await storageSet(KEYS.expenses, n); };
   const persistProducts = async (n) => { setProducts(n); await storageSet(KEYS.products, n); };
   const persistBills = async (n) => { setBills(n); await storageSet(KEYS.bills, n); };
+  const persistIncomeEntries = async (n) => { setIncomeEntries(n); await storageSet(KEYS.incomeEntries, n); };
 
   const balances = useMemo(() => {
     const map = {};
@@ -581,7 +587,7 @@ export default function App() {
       <div style={styles.bootScreen}>
         <GlobalStyles />
         <Loader2 size={28} style={{ animation: "spin 1s linear infinite" }} />
-        <p style={{ marginTop: 12, fontFamily: FONT.body, color: PALETTE.ink }}>Loadingâ¦</p>
+        <p style={{ marginTop: 12, fontFamily: FONT.body, color: PALETTE.ink }}>Loading…</p>
         <style>{`@keyframes spin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }`}</style>
       </div>
     );
@@ -682,7 +688,7 @@ export default function App() {
             }}
             onMarkPaid={async (bill, paymentAccountId) => {
               const je = {
-                id: uid("je"), date: todayStr(), memo: `Payment for Bill ${bill.billNo} â ${bill.vendor}`,
+                id: uid("je"), date: todayStr(), memo: `Payment for Bill ${bill.billNo} — ${bill.vendor}`,
                 lines: [
                   { accountId: apAccount.id, debit: bill.total, credit: 0 },
                   { accountId: paymentAccountId, debit: 0, credit: bill.total },
@@ -728,7 +734,7 @@ export default function App() {
               }
               if (depositInfo && depositInfo.amount > 0 && depositInfo.accountId && incomeAccount) {
                 const payJe = {
-                  id: uid("je"), date: depositInfo.date || todayStr(), memo: `Deposit received â Invoice ${invoice.number} (${depositInfo.method})`,
+                  id: uid("je"), date: depositInfo.date || todayStr(), memo: `Deposit received — Invoice ${invoice.number} (${depositInfo.method})`,
                   lines: [{ accountId: depositInfo.accountId, debit: depositInfo.amount, credit: 0 }, { accountId: incomeAccount.id, debit: 0, credit: depositInfo.amount }],
                   createdBy: currentUser.name, source: "invoice-payment", refId: newInvoice.id,
                 };
@@ -776,7 +782,7 @@ export default function App() {
             }}
             onRecordPayment={async (invoice, amount, accountId, method, date) => {
               const je = {
-                id: uid("je"), date: date || todayStr(), memo: `Payment received â Invoice ${invoice.number} (${method})`,
+                id: uid("je"), date: date || todayStr(), memo: `Payment received — Invoice ${invoice.number} (${method})`,
                 lines: [
                   { accountId: accountId, debit: amount, credit: 0 },
                   { accountId: incomeAccount ? incomeAccount.id : "", debit: 0, credit: amount },
@@ -847,6 +853,32 @@ export default function App() {
           />
         )}
 
+        {tab === "income" && (
+          <IncomeTab
+            accounts={accounts} incomeEntries={incomeEntries} currentUser={currentUser}
+            onAddCategory={async (acc) => { await persistAccounts([...accounts, { ...acc, id: uid("acc") }]); return acc; }}
+            onAdd={async (entry, journalEntry) => {
+              const je = { ...journalEntry, id: uid("je"), createdBy: currentUser.name };
+              await persistJournal([je, ...journal]);
+              await persistIncomeEntries([{ ...entry, id: uid("inc"), journalId: je.id, createdBy: currentUser.name }, ...incomeEntries]);
+              showToast("Income recorded");
+            }}
+            onEdit={async (entryId, updatedEntry, journalEntry) => {
+              const old = incomeEntries.find((e) => e.id === entryId);
+              const je = { ...journalEntry, id: uid("je"), createdBy: currentUser.name };
+              const nextJournal = old ? journal.filter((j) => j.id !== old.journalId) : journal;
+              await persistJournal([je, ...nextJournal]);
+              await persistIncomeEntries(incomeEntries.map((e) => (e.id === entryId ? { ...e, ...updatedEntry, journalId: je.id } : e)));
+              showToast("Income updated");
+            }}
+            onDelete={async (entry) => {
+              await persistIncomeEntries(incomeEntries.filter((e) => e.id !== entry.id));
+              await persistJournal(journal.filter((j) => j.id !== entry.journalId));
+              showToast("Income entry deleted");
+            }}
+          />
+        )}
+
         {tab === "accounts" && (
           <ChartOfAccounts
             accounts={accounts} balances={balances} currentUser={currentUser}
@@ -869,7 +901,7 @@ export default function App() {
                   ? [{ accountId: equityAccount.id, debit: delta, credit: 0 }, { accountId: account.id, debit: 0, credit: delta }]
                   : [{ accountId: account.id, debit: -delta, credit: 0 }, { accountId: equityAccount.id, debit: 0, credit: -delta }]);
               const je = {
-                id: uid("je"), date: date || todayStr(), memo: note || `Balance adjustment â ${account.name}`,
+                id: uid("je"), date: date || todayStr(), memo: note || `Balance adjustment — ${account.name}`,
                 lines, createdBy: currentUser.name, source: "balance-adjustment",
               };
               await persistJournal([je, ...journal]);
@@ -895,7 +927,7 @@ export default function App() {
           />
         )}
 
-        {tab === "reports" && <Reports accounts={accounts} balances={balances} invoices={invoices} expenses={expenses} journal={journal} />}
+        {tab === "reports" && <Reports accounts={accounts} balances={balances} invoices={invoices} expenses={expenses} journal={journal} products={products} />}
 
         {tab === "users" && currentUser.role === "admin" && (
           <UsersPanel
@@ -950,7 +982,7 @@ function LoginScreen({ users, onCreateFirstAdmin, onLogin }) {
           </div>
         </div>
         <p style={{ color: PALETTE.inkSoft, fontSize: 13, marginTop: 12, marginBottom: 22 }}>
-          {isFirstRun ? "First time here â create your Admin account" : "Sign in with your name and PIN"}
+          {isFirstRun ? "First time here — create your Admin account" : "Sign in with your name and PIN"}
         </p>
         <label style={labelStyle}>Name</label>
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Rahim" style={inputStyle} />
@@ -960,7 +992,7 @@ function LoginScreen({ users, onCreateFirstAdmin, onLogin }) {
         <PrimaryButton type="submit" style={{ width: "100%", marginTop: 20, justifyContent: "center", padding: "12px 0" }}>
           {isFirstRun ? "Create Admin Account" : "Sign In"}
         </PrimaryButton>
-        {!isFirstRun && <p style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 16, lineHeight: 1.5 }}>To add a new user, ask your Admin â new team members can be added from the "Users" tab after logging in.</p>}
+        {!isFirstRun && <p style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 16, lineHeight: 1.5 }}>To add a new user, ask your Admin — new team members can be added from the "Users" tab after logging in.</p>}
       </form>
     </div>
   );
@@ -971,7 +1003,7 @@ function LoginScreen({ users, onCreateFirstAdmin, onLogin }) {
 --------------------------------------------------------- */
 
 function Sidebar({ tab, setTab, currentUser, onLogout, mobileOpen, onCloseMobile }) {
-  const iconMap = { dashboard: LayoutDashboard, invoices: FileText, bills: ClipboardList, expenses: Wallet, inventory: Package, accounts: ScrollText, journal: Receipt, reports: PieChart };
+  const iconMap = { dashboard: LayoutDashboard, invoices: FileText, bills: ClipboardList, expenses: Wallet, income: TrendingUp, inventory: Package, accounts: ScrollText, journal: Receipt, reports: PieChart };
   const allowed = currentUser.role === "admin" || !Array.isArray(currentUser.permissions)
     ? ALL_TABS.map((t) => t.key)
     : currentUser.permissions;
@@ -1097,13 +1129,13 @@ function Dashboard({ accounts, balances, journal, products }) {
 }
 
 /* ---------------------------------------------------------
-   Inventory â Pinterest-style product grid
+   Inventory — Pinterest-style product grid
 --------------------------------------------------------- */
 
 function Inventory({ products, currentUser, onAdd, onEdit, onDelete, onImport }) {
   const [open, setOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
-  const [form, setForm] = useState({ name: "", sku: "", unit: "pcs", qty: "", costPrice: "", salePrice: "", reorderLevel: "3", photo: "" });
+  const [form, setForm] = useState({ name: "", sku: "", category: "", unit: "pcs", qty: "", costPrice: "", salePrice: "", reorderLevel: "3", photo: "" });
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState("");
   const [search, setSearch] = useState("");
@@ -1143,7 +1175,7 @@ function Inventory({ products, currentUser, onAdd, onEdit, onDelete, onImport })
   const startEditProduct = (p) => {
     setEditingProduct(p);
     setForm({
-      name: p.name || "", sku: p.sku || "", unit: p.unit || "pcs", qty: String(p.qty ?? ""),
+      name: p.name || "", sku: p.sku || "", category: p.category || "", unit: p.unit || "pcs", qty: String(p.qty ?? ""),
       costPrice: String(p.costPrice ?? ""), salePrice: String(p.salePrice ?? ""), reorderLevel: String(p.reorderLevel ?? "3"),
       photo: p.photo || "",
     });
@@ -1153,14 +1185,14 @@ function Inventory({ products, currentUser, onAdd, onEdit, onDelete, onImport })
   const cancelProductForm = () => {
     setOpen(false);
     setEditingProduct(null);
-    setForm({ name: "", sku: "", unit: "pcs", qty: "", costPrice: "", salePrice: "", reorderLevel: "3", photo: "" });
+    setForm({ name: "", sku: "", category: "", unit: "pcs", qty: "", costPrice: "", salePrice: "", reorderLevel: "3", photo: "" });
   };
 
   const submit = (e) => {
     e.preventDefault();
     if (!form.name.trim()) return;
     const payload = {
-      name: form.name.trim(), sku: form.sku.trim(), unit: form.unit.trim() || "pcs",
+      name: form.name.trim(), sku: form.sku.trim(), category: form.category.trim() || "Uncategorized", unit: form.unit.trim() || "pcs",
       qty: Number(form.qty) || 0, costPrice: Number(form.costPrice) || 0, salePrice: Number(form.salePrice) || 0,
       reorderLevel: Number(form.reorderLevel) || 3, photo: form.photo || "",
     };
@@ -1200,10 +1232,11 @@ function Inventory({ products, currentUser, onAdd, onEdit, onDelete, onImport })
           const name = String(pick(row, ["Product Name", "Name"]) || "").trim();
           if (!name) continue;
           const sku = String(pick(row, ["Product Code", "SKU"]) || "").trim();
+          const category = String(pick(row, ["Product Type", "Category"]) || "Uncategorized").trim();
           const qty = Number(pick(row, ["Quantity", "Qty", "Remaing Stock", "Remaining Stock"])) || 0;
           const costPrice = Number(pick(row, ["Purchase Price", "Cost Price"])) || 0;
           const salePrice = Number(pick(row, ["Selling Price", "Sale Price"])) || 0;
-          parsed.push({ name, sku, unit: "pcs", qty, costPrice, salePrice, reorderLevel: 3 });
+          parsed.push({ name, sku, category, unit: "pcs", qty, costPrice, salePrice, reorderLevel: 3 });
         }
 
         if (parsed.length === 0) {
@@ -1240,7 +1273,7 @@ function Inventory({ products, currentUser, onAdd, onEdit, onDelete, onImport })
               padding: "10px 16px", borderRadius: 999, fontSize: 13.5, fontWeight: 600, border: `1px solid ${PALETTE.line}`, cursor: "pointer",
             }}>
               {importing ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : <FileText size={15} />}
-              {importing ? "Importingâ¦" : "Import from Excel"}
+              {importing ? "Importing…" : "Import from Excel"}
               <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} style={{ display: "none" }} />
             </label>
             <PrimaryButton onClick={() => (open ? cancelProductForm() : setOpen(true))}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Product"}</PrimaryButton>
@@ -1269,7 +1302,7 @@ function Inventory({ products, currentUser, onAdd, onEdit, onDelete, onImport })
                   display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.08)", color: PALETTE.ink,
                   padding: "8px 14px", borderRadius: 999, fontSize: 12.5, fontWeight: 600, border: `1px solid ${PALETTE.line}`, cursor: "pointer",
                 }}>
-                  {photoBusy ? "Processingâ¦" : form.photo ? "Change Photo" : "Add Photo (optional)"}
+                  {photoBusy ? "Processing…" : form.photo ? "Change Photo" : "Add Photo (optional)"}
                   <input type="file" accept="image/*" onChange={handlePhoto} style={{ display: "none" }} />
                 </label>
                 {form.photo && <GhostButton onClick={() => setForm({ ...form, photo: "" })} style={{ marginLeft: 8 }}>Remove</GhostButton>}
@@ -1277,6 +1310,7 @@ function Inventory({ products, currentUser, onAdd, onEdit, onDelete, onImport })
             </div>
             <div><label style={labelStyle}>Product Name</label><input style={inputStyle} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Blue Cotton Dress" /></div>
             <div><label style={labelStyle}>SKU (optional)</label><input style={inputStyle} value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} placeholder="SKU-001" /></div>
+            <div><label style={labelStyle}>Category</label><input style={inputStyle} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="e.g. Dress, Saree" /></div>
             <div><label style={labelStyle}>Unit</label><input style={inputStyle} value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="pcs" /></div>
             <div><label style={labelStyle}>Opening Qty</label><input style={inputStyle} type="number" value={form.qty} onChange={(e) => setForm({ ...form, qty: e.target.value })} placeholder="0" /></div>
             <div><label style={labelStyle}>Cost Price (BDT)</label><input style={inputStyle} type="number" value={form.costPrice} onChange={(e) => setForm({ ...form, costPrice: e.target.value })} placeholder="0" /></div>
@@ -1296,13 +1330,13 @@ function Inventory({ products, currentUser, onAdd, onEdit, onDelete, onImport })
             style={{ ...inputStyle, paddingLeft: 38 }}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search products by name or SKUâ¦"
+            placeholder="Search products by name or SKU…"
           />
         </div>
       </Card>
 
       {filteredProducts.length === 0 ? (
-        <Card><EmptyState text={products.length === 0 ? "No products yet â add your first product to start tracking stock." : "No products match your search."} /></Card>
+        <Card><EmptyState text={products.length === 0 ? "No products yet — add your first product to start tracking stock." : "No products match your search."} /></Card>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
           {filteredProducts.map((p) => {
@@ -1321,7 +1355,7 @@ function Inventory({ products, currentUser, onAdd, onEdit, onDelete, onImport })
                 )}
                 <div style={{ padding: 16 }}>
                   <div style={{ fontWeight: 600, fontSize: 14.5, marginBottom: 2 }}>{p.name}</div>
-                  <div style={{ fontSize: 11.5, color: PALETTE.inkSoft, marginBottom: 10 }}>{p.sku || "No SKU"}</div>
+                  <div style={{ fontSize: 11.5, color: PALETTE.inkSoft, marginBottom: 10 }}>{p.sku || "No SKU"}{p.category ? ` · ${p.category}` : ""}</div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                     <Badge tone={out ? "bad" : low ? "neutral" : "good"}>{p.qty} {p.unit} in stock</Badge>
                     {isAdmin && (
@@ -1346,7 +1380,7 @@ function Inventory({ products, currentUser, onAdd, onEdit, onDelete, onImport })
 }
 
 /* ---------------------------------------------------------
-   Bills â purchases that add stock (QuickBooks-style)
+   Bills — purchases that add stock (QuickBooks-style)
 --------------------------------------------------------- */
 
 function Bills({ accounts, products, bills, currentUser, onAdd, onMarkPaid, onDelete }) {
@@ -1381,7 +1415,7 @@ function Bills({ accounts, products, bills, currentUser, onAdd, onMarkPaid, onDe
     const billNo = `BILL-${String(bills.length + 1).padStart(4, "0")}`;
     const bill = { billNo, vendor: vendor.trim(), date, items: validItems.map((it) => ({ productId: it.productId, qty: Number(it.qty), cost: Number(it.cost) || 0 })), total, status: paymentAccountId === apAccount?.id ? "unpaid" : "paid", paymentAccountId };
     const journalEntry = {
-      date, memo: `Bill ${billNo} â ${vendor.trim()}`,
+      date, memo: `Bill ${billNo} — ${vendor.trim()}`,
       lines: [{ accountId: inventoryAccount.id, debit: total, credit: 0 }, { accountId: paymentAccountId, debit: 0, credit: total }],
       source: "bill",
     };
@@ -1393,7 +1427,7 @@ function Bills({ accounts, products, bills, currentUser, onAdd, onMarkPaid, onDe
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
-        <PageHeader title="Bills" subtitle="Record a purchase â stock is added to inventory automatically" />
+        <PageHeader title="Bills" subtitle="Record a purchase — stock is added to inventory automatically" />
         <PrimaryButton onClick={() => setOpen((v) => !v)}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Bill"}</PrimaryButton>
       </div>
 
@@ -1457,7 +1491,7 @@ function Bills({ accounts, products, bills, currentUser, onAdd, onMarkPaid, onDe
                         payFor === b.id ? (
                           <>
                             <select style={{ ...inputStyle, padding: "4px 6px", fontSize: 12, width: "auto" }} value={payAccount} onChange={(e) => setPayAccount(e.target.value)}>
-                              <option value="">Pay fromâ¦</option>
+                              <option value="">Pay from…</option>
                               {cashAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                             </select>
                             <button className="pin-btn" disabled={!payAccount} onClick={() => { onMarkPaid(b, payAccount); setPayFor(null); setPayAccount(""); }} style={{ background: PALETTE.credit, color: "#fff", fontSize: 12, padding: "5px 10px", borderRadius: 999, opacity: payAccount ? 1 : 0.5 }}>Confirm</button>
@@ -1480,7 +1514,7 @@ function Bills({ accounts, products, bills, currentUser, onAdd, onMarkPaid, onDe
 }
 
 /* ---------------------------------------------------------
-   Invoices â items can link to inventory products
+   Invoices — items can link to inventory products
 --------------------------------------------------------- */
 
 function Invoices({ accounts, products, invoices, currentUser, onAdd, onEdit, onRecordPayment, onDelete, onBulkImport }) {
@@ -1571,7 +1605,7 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onEdit, on
     if (editingInvoice) {
       const { lines, qtyChanges: newQtyChanges } = buildCogs(cleanItems);
       const oldQtyChanges = (editingInvoice.items || []).filter((it) => it.productId).map((it) => ({ productId: it.productId, qty: Number(it.qty) || 0 }));
-      const cogsJournalEntry = lines.length > 0 ? { date, memo: `COGS â Invoice ${editingInvoice.number}`, lines, source: "invoice-cogs" } : null;
+      const cogsJournalEntry = lines.length > 0 ? { date, memo: `COGS — Invoice ${editingInvoice.number}`, lines, source: "invoice-cogs" } : null;
       const updatedInvoice = {
         customer: customer.trim(), phone: phone.trim(), address: address.trim(), salesBy: salesBy.trim(), media,
         date, dueDate, items: cleanItems, subtotal, discount: discountAmt, total,
@@ -1587,7 +1621,7 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onEdit, on
       date, dueDate, items: cleanItems, subtotal, discount: discountAmt, total, payments: [], status: "unpaid",
     };
     const { lines, qtyChanges } = buildCogs(cleanItems);
-    const cogsJournalEntry = lines.length > 0 ? { date, memo: `COGS â Invoice ${number}`, lines, source: "invoice-cogs" } : null;
+    const cogsJournalEntry = lines.length > 0 ? { date, memo: `COGS — Invoice ${number}`, lines, source: "invoice-cogs" } : null;
 
     const depositAmt = Number(deposit) || 0;
     onAdd(invoice, cogsJournalEntry, qtyChanges, depositAmt > 0 ? { amount: depositAmt, accountId: depositAccount, method: depositMethod, date } : null);
@@ -1668,7 +1702,7 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onEdit, on
           payments.forEach((p) => {
             if (!p.accountId || !incomeAccount) return;
             newJournalEntries.push({
-              id: uid("je"), date: p.date, memo: `Payment received â Invoice ${number} (imported)`,
+              id: uid("je"), date: p.date, memo: `Payment received — Invoice ${number} (imported)`,
               lines: [{ accountId: p.accountId, debit: p.amount, credit: 0 }, { accountId: incomeAccount.id, debit: 0, credit: p.amount }],
               createdBy: currentUser.name, source: "invoice-payment", refId: invoice.id,
             });
@@ -1681,7 +1715,7 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onEdit, on
           setImportMsg('No sales rows found. Make sure the sheet has "Customer Name", "Qty", "Unit Price"/"Price" columns.');
         } else {
           const ok = window.confirm(
-            `${newInvoices.length} past sales found. Only amounts actually received (advance/payment) will be added to income â unpaid balances stay on record but won't affect your books. Inventory stock will NOT be changed. Continue?`
+            `${newInvoices.length} past sales found. Only amounts actually received (advance/payment) will be added to income — unpaid balances stay on record but won't affect your books. Inventory stock will NOT be changed. Continue?`
           );
           if (ok) onBulkImport({ newInvoices, newJournalEntries });
         }
@@ -1698,7 +1732,7 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onEdit, on
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
-        <PageHeader title="Invoices" subtitle="Create a new invoice â inventory and journal entries update automatically" />
+        <PageHeader title="Invoices" subtitle="Create a new invoice — inventory and journal entries update automatically" />
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {currentUser.role === "admin" && (
             <label className="pin-btn" style={{
@@ -1706,7 +1740,7 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onEdit, on
               padding: "10px 16px", borderRadius: 999, fontSize: 13.5, fontWeight: 600, border: `1px solid ${PALETTE.line}`, cursor: "pointer",
             }}>
               {importing ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : <FileText size={15} />}
-              {importing ? "Importingâ¦" : "Import Past Sales"}
+              {importing ? "Importing…" : "Import Past Sales"}
               <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} style={{ display: "none" }} />
             </label>
           )}
@@ -1725,7 +1759,7 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onEdit, on
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
             <div>
               <div style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 600 }}>{editingInvoice ? `Editing ${editingInvoice.number}` : "New Invoice"}</div>
-              <div style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 2 }}>Customer & Invoice Info â fill details, add items below</div>
+              <div style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 2 }}>Customer & Invoice Info — fill details, add items below</div>
             </div>
             {editingInvoice && (
               <div style={{ textAlign: "right" }}>
@@ -1734,7 +1768,7 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onEdit, on
                   {fmtMoney(Math.max(editingInvoice.total - (editingInvoice.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0), 0))}
                 </div>
                 {editingInvoice.status !== "paid" && (
-                  <GhostButton onClick={() => { setPayingInvoice(editingInvoice); cancelForm(); }} style={{ marginTop: 2 }}>Receive Payment â</GhostButton>
+                  <GhostButton onClick={() => { setPayingInvoice(editingInvoice); cancelForm(); }} style={{ marginTop: 2 }}>Receive Payment →</GhostButton>
                 )}
               </div>
             )}
@@ -1778,7 +1812,7 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onEdit, on
                       {items.length > 1 && <button type="button" className="pin-btn" onClick={() => setItems(items.filter((_, idx) => idx !== i))} style={{ background: "transparent", color: PALETTE.debit }}><Trash2 size={14} /></button>}
                     </div>
                     {p && <div style={{ fontSize: 11, color: short ? PALETTE.debit : PALETTE.inkSoft, marginTop: 4 }}>
-                      {p.qty} {p.unit} in stock{short ? " â not enough stock, this will oversell" : ""}
+                      {p.qty} {p.unit} in stock{short ? " — not enough stock, this will oversell" : ""}
                     </div>}
                   </div>
                 );
@@ -1812,7 +1846,7 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onEdit, on
                     {Number(deposit) > 0 && (
                       <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
                         <select style={{ ...inputStyle, padding: "6px 8px", fontSize: 12.5 }} value={depositMethod} onChange={(e) => setDepositMethod(e.target.value)}>{PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}</select>
-                        <select style={{ ...inputStyle, padding: "6px 8px", fontSize: 12.5 }} value={depositAccount} onChange={(e) => setDepositAccount(e.target.value)}><option value="">Deposit toâ¦</option>{cashAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
+                        <select style={{ ...inputStyle, padding: "6px 8px", fontSize: 12.5 }} value={depositAccount} onChange={(e) => setDepositAccount(e.target.value)}><option value="">Deposit to…</option>{cashAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
                       </div>
                     )}
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${PALETTE.line}`, paddingTop: 8 }}>
@@ -1849,10 +1883,10 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onEdit, on
                       </button>
                     </Td>
                     <Td>{inv.customer}{inv.salesBy ? <div style={{ fontSize: 11, color: PALETTE.inkSoft }}>by {inv.salesBy}</div> : null}</Td>
-                    <Td style={{ fontSize: 12.5, color: PALETTE.inkSoft }}>{inv.phone || "â"}</Td>
+                    <Td style={{ fontSize: 12.5, color: PALETTE.inkSoft }}>{inv.phone || "—"}</Td>
                     <Td>{inv.date}</Td>
                     <Td align="right" mono>{fmtMoney(inv.total)}</Td>
-                    <Td align="right" mono>{balanceDue > 0 ? fmtMoney(balanceDue) : "â"}</Td>
+                    <Td align="right" mono>{balanceDue > 0 ? fmtMoney(balanceDue) : "—"}</Td>
                     <Td><Badge tone={statusTone}>{statusLabel}</Badge></Td>
                     <Td>
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -1920,7 +1954,7 @@ function ReceivePaymentPage({ invoice, cashAccounts, onClose, onConfirm }) {
           <div style={{ fontFamily: FONT.display, fontSize: 19, fontWeight: 600 }}>Receive Payment</div>
           <button className="pin-btn" onClick={onClose} style={{ background: PALETTE.chip, padding: 8, borderRadius: 999 }}><X size={16} /></button>
         </div>
-        <p style={{ fontSize: 13, color: PALETTE.inkSoft, marginTop: 0, marginBottom: 20 }}>{invoice.number} â {invoice.customer}</p>
+        <p style={{ fontSize: 13, color: PALETTE.inkSoft, marginTop: 0, marginBottom: 20 }}>{invoice.number} — {invoice.customer}</p>
 
         <Card style={{ marginBottom: 18, padding: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: PALETTE.inkSoft, marginBottom: 4 }}><span>Total</span><span style={{ fontFamily: FONT.mono, color: PALETTE.ink }}>{fmtMoney(invoice.total)}</span></div>
@@ -1961,7 +1995,7 @@ function InvoiceDetailModal({ invoice, onClose, onEdit, onReceivePayment }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
           <div>
             <div style={{ fontFamily: FONT.display, fontSize: 20, fontWeight: 600 }}>{invoice.number}</div>
-            <div style={{ fontSize: 12.5, color: PALETTE.inkSoft, marginTop: 2 }}>{invoice.date}{invoice.dueDate && invoice.dueDate !== invoice.date ? ` Â· Due ${invoice.dueDate}` : ""}</div>
+            <div style={{ fontSize: 12.5, color: PALETTE.inkSoft, marginTop: 2 }}>{invoice.date}{invoice.dueDate && invoice.dueDate !== invoice.date ? ` · Due ${invoice.dueDate}` : ""}</div>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             {onEdit && <button className="pin-btn" onClick={onEdit} style={{ background: PALETTE.chip, padding: 8, borderRadius: 999 }}><Edit2 size={16} /></button>}
@@ -2014,7 +2048,7 @@ function InvoiceDetailModal({ invoice, onClose, onEdit, onReceivePayment }) {
             <div style={{ fontSize: 11, color: PALETTE.inkSoft, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 6 }}>Payment History</div>
             {invoice.payments.map((p) => (
               <div key={p.id} style={{ fontSize: 12.5, color: PALETTE.inkSoft, display: "flex", justifyContent: "space-between", padding: "4px 0" }}>
-                <span>{p.date} Â· {p.method}</span>
+                <span>{p.date} · {p.method}</span>
                 <span style={{ fontFamily: FONT.mono }}>{fmtMoney(p.amount)}</span>
               </div>
             ))}
@@ -2068,7 +2102,7 @@ function Expenses({ accounts, expenses, currentUser, onAdd, onEdit, onDelete, on
     const categoryName = expenseAccounts.find((a) => a.id === accountId)?.name || "Expense";
     const vendorLabel = vendor.trim() || categoryName;
     const expense = { date, vendor: vendorLabel, accountId, paymentAccountId, amount: amt, note: note.trim() };
-    const journalEntry = { date, memo: `Expense â ${vendorLabel}`, lines: [{ accountId, debit: amt, credit: 0 }, { accountId: paymentAccountId, debit: 0, credit: amt }], source: "expense" };
+    const journalEntry = { date, memo: `Expense — ${vendorLabel}`, lines: [{ accountId, debit: amt, credit: 0 }, { accountId: paymentAccountId, debit: 0, credit: amt }], source: "expense" };
     onAdd(expense, journalEntry);
     setVendor(""); setAmount(""); setNote(""); setOpen(false);
   };
@@ -2083,7 +2117,7 @@ function Expenses({ accounts, expenses, currentUser, onAdd, onEdit, onDelete, on
     const categoryName = expenseAccounts.find((a) => a.id === editForm.accountId)?.name || "Expense";
     const vendorLabel = editForm.vendor.trim() || categoryName;
     const updatedExpense = { date: editForm.date, vendor: vendorLabel, accountId: editForm.accountId, paymentAccountId: editForm.paymentAccountId, amount: amt, note: editForm.note.trim() };
-    const journalEntry = { date: editForm.date, memo: `Expense â ${vendorLabel}`, lines: [{ accountId: editForm.accountId, debit: amt, credit: 0 }, { accountId: editForm.paymentAccountId, debit: 0, credit: amt }], source: "expense" };
+    const journalEntry = { date: editForm.date, memo: `Expense — ${vendorLabel}`, lines: [{ accountId: editForm.accountId, debit: amt, credit: 0 }, { accountId: editForm.paymentAccountId, debit: 0, credit: amt }], source: "expense" };
     onEdit(expenseId, updatedExpense, journalEntry);
     setEditingId(null);
   };
@@ -2161,7 +2195,7 @@ function Expenses({ accounts, expenses, currentUser, onAdd, onEdit, onDelete, on
             amount: amt, note: "Imported", createdBy: currentUser.name,
           };
           const je = {
-            id: uid("je"), date: rowDate, memo: `Expense â ${expense.vendor} (imported)`,
+            id: uid("je"), date: rowDate, memo: `Expense — ${expense.vendor} (imported)`,
             lines: [{ accountId: categoryAccount.id, debit: amt, credit: 0 }, { accountId: paymentAccount.id, debit: 0, credit: amt }],
             createdBy: currentUser.name, source: "expense", refId: expense.id,
           };
@@ -2197,7 +2231,7 @@ function Expenses({ accounts, expenses, currentUser, onAdd, onEdit, onDelete, on
               padding: "10px 16px", borderRadius: 999, fontSize: 13.5, fontWeight: 600, border: `1px solid ${PALETTE.line}`, cursor: "pointer",
             }}>
               {importing ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : <FileText size={15} />}
-              {importing ? "Importingâ¦" : "Import from Excel"}
+              {importing ? "Importing…" : "Import from Excel"}
               <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} style={{ display: "none" }} />
             </label>
           )}
@@ -2264,14 +2298,170 @@ function Expenses({ accounts, expenses, currentUser, onAdd, onEdit, onDelete, on
                 }
                 return (
                   <tr key={exp.id} className="row-hover" style={{ borderBottom: `1px solid ${PALETTE.line}` }}>
-                    <Td>{exp.date}</Td><Td>{exp.vendor}</Td><Td>{acc?.name || "â"}</Td>
-                    <Td style={{ color: PALETTE.inkSoft, fontSize: 12.5 }}>{paidFrom?.name || "â"}</Td>
+                    <Td>{exp.date}</Td><Td>{exp.vendor}</Td><Td>{acc?.name || "—"}</Td>
+                    <Td style={{ color: PALETTE.inkSoft, fontSize: 12.5 }}>{paidFrom?.name || "—"}</Td>
                     <Td align="right" mono>{fmtMoney(exp.amount)}</Td><Td>{exp.createdBy}</Td>
                     <Td>
                       {currentUser.role === "admin" && (
                         <div style={{ display: "flex", gap: 2 }}>
                           <button className="pin-btn" onClick={() => startEdit(exp)} style={{ background: "transparent", color: PALETTE.inkSoft, padding: 5 }}><Edit2 size={14} /></button>
                           <button className="pin-btn" onClick={() => onDelete(exp)} style={{ background: "transparent", color: PALETTE.debit, padding: 5 }}><Trash2 size={14} /></button>
+                        </div>
+                      )}
+                    </Td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table></div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------
+   Income — manual/other income (loans, investor funds, etc.)
+--------------------------------------------------------- */
+
+function IncomeTab({ accounts, incomeEntries, currentUser, onAdd, onEdit, onDelete, onAddCategory }) {
+  const [open, setOpen] = useState(false);
+  const [date, setDate] = useState(todayStr());
+  const [source, setSource] = useState("");
+  const [accountId, setAccountId] = useState("");
+  const [depositAccountId, setDepositAccountId] = useState("");
+  const [amount, setAmount] = useState("");
+  const [note, setNote] = useState("");
+  const [newCategory, setNewCategory] = useState("");
+  const [addingCategory, setAddingCategory] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({});
+
+  const incomeAccounts = accounts.filter((a) => a.type === "income");
+  const cashAccounts = accounts.filter((a) => a.type === "asset" && a.name !== "Accounts Receivable" && a.name !== "Inventory");
+
+  const addCategory = async () => {
+    const clean = newCategory.trim();
+    if (!clean) return;
+    const existingCodes = accounts.filter((a) => a.type === "income").map((a) => Number(a.code) || 0);
+    const code = String(Math.max(4000, ...existingCodes, 0) + 10);
+    const acc = { code, name: clean, type: "income" };
+    await onAddCategory(acc);
+    setNewCategory("");
+    setAddingCategory(false);
+  };
+
+  const submit = (e) => {
+    e.preventDefault();
+    const amt = Number(amount);
+    if (!accountId || !depositAccountId || !(amt > 0)) return;
+    const categoryName = incomeAccounts.find((a) => a.id === accountId)?.name || "Income";
+    const sourceLabel = source.trim() || categoryName;
+    const entry = { date, source: sourceLabel, accountId, depositAccountId, amount: amt, note: note.trim() };
+    const journalEntry = { date, memo: `Income — ${sourceLabel}`, lines: [{ accountId: depositAccountId, debit: amt, credit: 0 }, { accountId, debit: 0, credit: amt }], source: "other-income" };
+    onAdd(entry, journalEntry);
+    setSource(""); setAmount(""); setNote(""); setOpen(false);
+  };
+
+  const startEdit = (entry) => {
+    setEditingId(entry.id);
+    setEditForm({ date: entry.date, source: entry.source, accountId: entry.accountId, depositAccountId: entry.depositAccountId, amount: String(entry.amount), note: entry.note || "" });
+  };
+  const saveEdit = (entryId) => {
+    const amt = Number(editForm.amount);
+    if (!editForm.accountId || !editForm.depositAccountId || !(amt > 0)) return;
+    const categoryName = incomeAccounts.find((a) => a.id === editForm.accountId)?.name || "Income";
+    const sourceLabel = editForm.source.trim() || categoryName;
+    const updatedEntry = { date: editForm.date, source: sourceLabel, accountId: editForm.accountId, depositAccountId: editForm.depositAccountId, amount: amt, note: editForm.note.trim() };
+    const journalEntry = { date: editForm.date, memo: `Income — ${sourceLabel}`, lines: [{ accountId: editForm.depositAccountId, debit: amt, credit: 0 }, { accountId: editForm.accountId, debit: 0, credit: amt }], source: "other-income" };
+    onEdit(entryId, updatedEntry, journalEntry);
+    setEditingId(null);
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
+        <PageHeader title="Income" subtitle="Record money coming in that isn't a product sale — loans, investor funds, refunds, etc." />
+        <PrimaryButton onClick={() => setOpen((v) => !v)}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Income"}</PrimaryButton>
+      </div>
+
+      {open && (
+        <Card style={{ marginBottom: 20 }}>
+          <form onSubmit={submit}>
+            <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "140px 1fr 140px", gap: 10 }}>
+              <div><label style={labelStyle}>Date</label><input type="date" style={inputStyle} value={date} onChange={(e) => setDate(e.target.value)} /></div>
+              <div><label style={labelStyle}>Source / Description (optional)</label><input style={inputStyle} value={source} onChange={(e) => setSource(e.target.value)} placeholder="e.g. Loan from Rahim Bhai" /></div>
+              <div><label style={labelStyle}>Amount (BDT)</label><input style={inputStyle} type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" /></div>
+            </div>
+            <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
+              <div>
+                <label style={labelStyle}>Income Category</label>
+                <select style={inputStyle} value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+                  <option value="">Select</option>
+                  {incomeAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+                {!addingCategory ? (
+                  <GhostButton onClick={() => setAddingCategory(true)} style={{ marginTop: 4 }}>+ New category</GhostButton>
+                ) : (
+                  <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                    <input style={{ ...inputStyle, padding: "6px 8px", fontSize: 12.5 }} value={newCategory} onChange={(e) => setNewCategory(e.target.value)} placeholder="e.g. Loan, Investment" />
+                    <button type="button" className="pin-btn" onClick={addCategory} style={{ background: PALETTE.credit, color: "#fff", fontSize: 12, padding: "6px 12px", borderRadius: 999 }}>Add</button>
+                    <button type="button" className="pin-btn" onClick={() => { setAddingCategory(false); setNewCategory(""); }} style={{ background: "transparent", color: PALETTE.inkSoft, fontSize: 12 }}>Cancel</button>
+                  </div>
+                )}
+              </div>
+              <div><label style={labelStyle}>Deposit To (Account)</label><select style={inputStyle} value={depositAccountId} onChange={(e) => setDepositAccountId(e.target.value)}><option value="">Select</option>{cashAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+            </div>
+            <div style={{ marginTop: 10 }}><label style={labelStyle}>Note (optional)</label><input style={inputStyle} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Additional details" /></div>
+            <PrimaryButton type="submit" style={{ marginTop: 16 }}>Save Income</PrimaryButton>
+          </form>
+        </Card>
+      )}
+
+      <Card>
+        {incomeEntries.length === 0 ? <EmptyState text="No other income recorded yet" /> : (
+          <div style={{ overflowX: "auto" }}><table style={{ minWidth: 640 }}>
+            <thead><tr style={{ borderBottom: `1px solid ${PALETTE.line}` }}><Th>Date</Th><Th>Source</Th><Th>Category</Th><Th>Deposited To</Th><Th align="right">Amount</Th><Th>By</Th><Th> </Th></tr></thead>
+            <tbody>
+              {incomeEntries.map((entry) => {
+                const acc = accounts.find((a) => a.id === entry.accountId);
+                const depositAcc = accounts.find((a) => a.id === entry.depositAccountId);
+                if (editingId === entry.id) {
+                  return (
+                    <tr key={entry.id} style={{ borderBottom: `1px solid ${PALETTE.line}` }}>
+                      <Td colSpan={7} style={{ padding: "12px 10px" }}>
+                        <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "130px 1fr 110px", gap: 8 }}>
+                          <input style={{ ...inputStyle, padding: "6px 8px" }} type="date" value={editForm.date} onChange={(e) => setEditForm({ ...editForm, date: e.target.value })} />
+                          <input style={{ ...inputStyle, padding: "6px 8px" }} value={editForm.source} onChange={(e) => setEditForm({ ...editForm, source: e.target.value })} placeholder="Source" />
+                          <input style={{ ...inputStyle, padding: "6px 8px" }} type="number" value={editForm.amount} onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })} placeholder="Amount" />
+                        </div>
+                        <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
+                          <select style={{ ...inputStyle, padding: "6px 8px" }} value={editForm.accountId} onChange={(e) => setEditForm({ ...editForm, accountId: e.target.value })}>
+                            {incomeAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                          </select>
+                          <select style={{ ...inputStyle, padding: "6px 8px" }} value={editForm.depositAccountId} onChange={(e) => setEditForm({ ...editForm, depositAccountId: e.target.value })}>
+                            {cashAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                          </select>
+                        </div>
+                        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                          <button className="pin-btn" onClick={() => saveEdit(entry.id)} style={{ background: PALETTE.credit, color: "#fff", fontSize: 12, padding: "6px 14px", borderRadius: 999 }}>Save</button>
+                          <button className="pin-btn" onClick={() => setEditingId(null)} style={{ background: "transparent", color: PALETTE.inkSoft, fontSize: 12 }}>Cancel</button>
+                        </div>
+                      </Td>
+                    </tr>
+                  );
+                }
+                return (
+                  <tr key={entry.id} className="row-hover" style={{ borderBottom: `1px solid ${PALETTE.line}` }}>
+                    <Td>{entry.date}</Td><Td>{entry.source}</Td><Td>{acc?.name || "—"}</Td>
+                    <Td style={{ color: PALETTE.inkSoft, fontSize: 12.5 }}>{depositAcc?.name || "—"}</Td>
+                    <Td align="right" mono style={{ color: PALETTE.credit }}>{fmtMoney(entry.amount)}</Td>
+                    <Td>{entry.createdBy}</Td>
+                    <Td>
+                      {currentUser.role === "admin" && (
+                        <div style={{ display: "flex", gap: 2 }}>
+                          <button className="pin-btn" onClick={() => startEdit(entry)} style={{ background: "transparent", color: PALETTE.inkSoft, padding: 5 }}><Edit2 size={14} /></button>
+                          <button className="pin-btn" onClick={() => onDelete(entry)} style={{ background: "transparent", color: PALETTE.debit, padding: 5 }}><Trash2 size={14} /></button>
                         </div>
                       )}
                     </Td>
@@ -2373,20 +2563,20 @@ function ChartOfAccounts({ accounts, balances, currentUser, onAdd, onAddMany, on
       {transferOpen && (
         <Card style={{ marginBottom: 20 }}>
           <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Transfer Between Accounts</div>
-          <p style={{ fontSize: 12.5, color: PALETTE.inkSoft, marginTop: 0, marginBottom: 14 }}>Move money from one account to another â e.g. Cash to Bank, or Bank to bKash.</p>
+          <p style={{ fontSize: 12.5, color: PALETTE.inkSoft, marginTop: 0, marginBottom: 14 }}>Move money from one account to another — e.g. Cash to Bank, or Bank to bKash.</p>
           <form onSubmit={submitTransfer} className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 140px", gap: 10 }}>
             <div>
               <label style={labelStyle}>From</label>
               <select style={inputStyle} value={transferForm.from} onChange={(e) => setTransferForm({ ...transferForm, from: e.target.value })}>
                 <option value="">Select account</option>
-                {accounts.map((a) => <option key={a.id} value={a.id}>{a.code} â {a.name}</option>)}
+                {accounts.map((a) => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
               </select>
             </div>
             <div>
               <label style={labelStyle}>To</label>
               <select style={inputStyle} value={transferForm.to} onChange={(e) => setTransferForm({ ...transferForm, to: e.target.value })}>
                 <option value="">Select account</option>
-                {accounts.map((a) => <option key={a.id} value={a.id}>{a.code} â {a.name}</option>)}
+                {accounts.map((a) => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
               </select>
             </div>
             <div><label style={labelStyle}>Amount (BDT)</label><input style={inputStyle} type="number" value={transferForm.amount} onChange={(e) => setTransferForm({ ...transferForm, amount: e.target.value })} placeholder="0" /></div>
@@ -2500,7 +2690,7 @@ function Journal({ accounts, journal, currentUser, onAdd, onDelete }) {
               <div key={i} className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 130px 130px 30px", gap: 8, marginBottom: 8, alignItems: "center" }}>
                 <select style={inputStyle} value={l.accountId} onChange={(e) => updateLine(i, "accountId", e.target.value)}>
                   <option value="">Select account</option>
-                  {accounts.map((a) => <option key={a.id} value={a.id}>{a.code} â {a.name}</option>)}
+                  {accounts.map((a) => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
                 </select>
                 <input style={inputStyle} type="number" placeholder="Debit" value={l.debit} onChange={(e) => updateLine(i, "debit", e.target.value)} />
                 <input style={inputStyle} type="number" placeholder="Credit" value={l.credit} onChange={(e) => updateLine(i, "credit", e.target.value)} />
@@ -2531,7 +2721,7 @@ function Journal({ accounts, journal, currentUser, onAdd, onDelete }) {
                     <Td>{j.date}</Td><Td>{j.memo}</Td>
                     <Td>{j.lines.map((l, idx) => {
                       const acc = accounts.find((a) => a.id === l.accountId);
-                      return <div key={idx} style={{ fontSize: 12, fontFamily: FONT.mono, color: PALETTE.inkSoft }}>{acc?.name || "â"}: {l.debit ? `Dr ${fmtMoney(l.debit)}` : `Cr ${fmtMoney(l.credit)}`}</div>;
+                      return <div key={idx} style={{ fontSize: 12, fontFamily: FONT.mono, color: PALETTE.inkSoft }}>{acc?.name || "—"}: {l.debit ? `Dr ${fmtMoney(l.debit)}` : `Cr ${fmtMoney(l.credit)}`}</div>;
                     })}</Td>
                     <Td align="right" mono>{fmtMoney(total)}</Td><Td>{j.createdBy}</Td>
                     {isAdmin && <Td><button className="pin-btn" onClick={() => onDelete(j.id)} style={{ background: "transparent", color: PALETTE.debit }}><Trash2 size={14} /></button></Td>}
@@ -2550,7 +2740,7 @@ function Journal({ accounts, journal, currentUser, onAdd, onDelete }) {
    Reports
 --------------------------------------------------------- */
 
-function Reports({ accounts, balances, invoices, expenses, journal }) {
+function Reports({ accounts, balances, invoices, expenses, journal, products }) {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
@@ -2569,7 +2759,7 @@ function Reports({ accounts, balances, invoices, expenses, journal }) {
     return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
   };
 
-  // Sales by month â from invoice totals (what was invoiced, regardless of payment)
+  // Sales by month — from invoice totals (what was invoiced, regardless of payment)
   const salesByMonth = useMemo(() => {
     const map = {};
     invoices.filter((inv) => inRange(inv.date)).forEach((inv) => {
@@ -2579,7 +2769,7 @@ function Reports({ accounts, balances, invoices, expenses, journal }) {
     return Object.entries(map).sort((a, b) => b[0].localeCompare(a[0]));
   }, [invoices, fromDate, toDate]);
 
-  // Income by month â from journal lines that credited an income-type account (cash actually received)
+  // Income by month — from journal lines that credited an income-type account (cash actually received)
   const incomeByMonth = useMemo(() => {
     const incomeAccountIds = new Set(accounts.filter((a) => a.type === "income").map((a) => a.id));
     const map = {};
@@ -2603,6 +2793,86 @@ function Reports({ accounts, balances, invoices, expenses, journal }) {
     });
     return Object.entries(map).sort((a, b) => b[0].localeCompare(a[0]));
   }, [expenses, fromDate, toDate]);
+
+  // Sales by Customer Summary — grouped by "Sales By" team/person, then customer
+  const salesByCustomer = useMemo(() => {
+    const groups = {};
+    invoices.filter((inv) => inRange(inv.date)).forEach((inv) => {
+      const groupName = inv.salesBy?.trim() || "Unassigned";
+      const customerName = inv.customer?.trim() || "Unknown Customer";
+      if (!groups[groupName]) groups[groupName] = { customers: {}, total: 0 };
+      groups[groupName].customers[customerName] = (groups[groupName].customers[customerName] || 0) + (Number(inv.total) || 0);
+      groups[groupName].total += Number(inv.total) || 0;
+    });
+    return Object.entries(groups)
+      .map(([name, g]) => ({ name, total: g.total, customers: Object.entries(g.customers).sort((a, b) => b[1] - a[1]) }))
+      .sort((a, b) => b.total - a.total);
+  }, [invoices, fromDate, toDate]);
+  const salesByCustomerGrandTotal = salesByCustomer.reduce((s, g) => s + g.total, 0);
+
+  // Sales by Product Summary — grouped by product category
+  const salesByProduct = useMemo(() => {
+    const productMap = {};
+    products.forEach((p) => { productMap[p.id] = p; });
+    const groups = {};
+    invoices.filter((inv) => inRange(inv.date)).forEach((inv) => {
+      (inv.items || []).forEach((it) => {
+        const p = it.productId ? productMap[it.productId] : null;
+        const category = p ? (p.category || "Uncategorized") : "Other (no product link)";
+        const key = p ? p.name : (it.desc || "Item");
+        const qty = Number(it.qty) || 0;
+        const amount = qty * (Number(it.rate) || 0);
+        const cos = p ? qty * (Number(p.costPrice) || 0) : 0;
+        if (!groups[category]) groups[category] = { items: {}, qty: 0, amount: 0, cos: 0 };
+        if (!groups[category].items[key]) groups[category].items[key] = { qty: 0, amount: 0, cos: 0 };
+        groups[category].items[key].qty += qty;
+        groups[category].items[key].amount += amount;
+        groups[category].items[key].cos += cos;
+        groups[category].qty += qty;
+        groups[category].amount += amount;
+        groups[category].cos += cos;
+      });
+    });
+    return Object.entries(groups)
+      .map(([name, g]) => ({
+        name, qty: g.qty, amount: g.amount, cos: g.cos, margin: g.amount - g.cos,
+        items: Object.entries(g.items).map(([iname, iv]) => ({ name: iname, ...iv, margin: iv.amount - iv.cos })).sort((a, b) => b.amount - a.amount),
+      }))
+      .sort((a, b) => b.amount - a.amount);
+  }, [invoices, products, fromDate, toDate]);
+  const salesByProductGrandTotal = salesByProduct.reduce((s, g) => s + g.amount, 0);
+
+  // Profit & Loss — Income (by income account, in range), Cost of Sales (COGS, in range), Expenses (by category, in range)
+  const profitLoss = useMemo(() => {
+    const incomeAccounts = accounts.filter((a) => a.type === "income");
+    const cogsAccount = accounts.find((a) => a.name === "Cost of Goods Sold");
+    const incomeTotals = {};
+    let cogsTotal = 0;
+    journal.filter((j) => inRange(j.date)).forEach((j) => {
+      j.lines.forEach((line) => {
+        const acc = accounts.find((a) => a.id === line.accountId);
+        if (!acc) return;
+        const net = (Number(line.credit) || 0) - (Number(line.debit) || 0);
+        if (acc.type === "income") incomeTotals[acc.id] = (incomeTotals[acc.id] || 0) + net;
+        if (cogsAccount && acc.id === cogsAccount.id) cogsTotal += (Number(line.debit) || 0) - (Number(line.credit) || 0);
+      });
+    });
+    const incomeRows = incomeAccounts.map((a) => ({ name: a.name, amount: incomeTotals[a.id] || 0 })).filter((r) => r.amount !== 0);
+    const totalIncome = incomeRows.reduce((s, r) => s + r.amount, 0);
+    const discountsGiven = invoices.filter((inv) => inRange(inv.date)).reduce((s, inv) => s + (Number(inv.discount) || 0), 0);
+    const grossProfit = totalIncome - cogsTotal;
+
+    const expenseAccounts = accounts.filter((a) => a.type === "expense" && a.name !== "Cost of Goods Sold");
+    const expenseTotals = {};
+    expenses.filter((e) => inRange(e.date)).forEach((e) => {
+      expenseTotals[e.accountId] = (expenseTotals[e.accountId] || 0) + (Number(e.amount) || 0);
+    });
+    const expenseRows = expenseAccounts.map((a) => ({ name: a.name, amount: expenseTotals[a.id] || 0 })).filter((r) => r.amount !== 0).sort((a, b) => b.amount - a.amount);
+    const totalExpenses = expenseRows.reduce((s, r) => s + r.amount, 0);
+    const netEarnings = grossProfit - totalExpenses;
+
+    return { incomeRows, totalIncome, discountsGiven, cogsTotal, grossProfit, expenseRows, totalExpenses, netEarnings };
+  }, [journal, accounts, expenses, invoices, fromDate, toDate]);
 
   let totalDebit = 0, totalCredit = 0;
   const rows = accounts.map((a) => {
@@ -2642,7 +2912,7 @@ function Reports({ accounts, balances, invoices, expenses, journal }) {
 
   return (
     <div>
-      <PageHeader title="Reports" subtitle="Sales, income, and expense reports by month â filter by date to customize" />
+      <PageHeader title="Reports" subtitle="Sales, income, and expense reports by month — filter by date to customize" />
 
       <Card style={{ marginBottom: 20, padding: 16 }}>
         <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 10, alignItems: "end" }}>
@@ -2658,14 +2928,124 @@ function Reports({ accounts, balances, invoices, expenses, journal }) {
         <MonthlyCard title="Expense Report" subtitle="Total expenses, by month" data={expenseByMonth} tone="debit" />
       </div>
 
-      <PageHeader title="Trial Balance" subtitle="Debit and credit balances for every account â the two columns should match when the books are correct" />
+      <PageHeader title="Sales by Customer Summary" subtitle="Invoiced amount grouped by Sales By, then customer" />
+      <Card style={{ marginBottom: 24 }}>
+        {salesByCustomer.length === 0 ? <EmptyState text="No sales for this period" /> : (
+          <div style={{ overflowX: "auto" }}><table style={{ minWidth: 460 }}>
+            <tbody>
+              {salesByCustomer.map((g) => (
+                <React.Fragment key={g.name}>
+                  <tr><Td colSpan={2} style={{ paddingTop: 14, fontWeight: 700, color: PALETTE.accent, fontSize: 12.5, textTransform: "uppercase", letterSpacing: 0.3 }}>{g.name}</Td></tr>
+                  {g.customers.map(([cname, amt]) => (
+                    <tr key={cname} className="row-hover" style={{ borderBottom: `1px solid ${PALETTE.line}` }}>
+                      <Td style={{ paddingLeft: 20 }}>{cname}</Td>
+                      <Td align="right" mono>{fmtMoney(amt)}</Td>
+                    </tr>
+                  ))}
+                  <tr style={{ borderBottom: `1px solid ${PALETTE.line}` }}>
+                    <Td style={{ fontWeight: 700, fontSize: 12.5 }}>Total for {g.name}</Td>
+                    <Td align="right" mono style={{ fontWeight: 700 }}>{fmtMoney(g.total)}</Td>
+                  </tr>
+                </React.Fragment>
+              ))}
+              <tr style={{ borderTop: `2px solid ${PALETTE.ink}` }}>
+                <Td style={{ fontWeight: 700, fontSize: 14 }}>Grand Total</Td>
+                <Td align="right" mono style={{ fontWeight: 700, fontSize: 14 }}>{fmtMoney(salesByCustomerGrandTotal)}</Td>
+              </tr>
+            </tbody>
+          </table></div>
+        )}
+      </Card>
+
+      <PageHeader title="Sales by Product Summary" subtitle="Quantity, revenue, cost of sales, and margin — grouped by category" />
+      <Card style={{ marginBottom: 24 }}>
+        {salesByProduct.length === 0 ? <EmptyState text="No sales for this period" /> : (
+          <div style={{ overflowX: "auto" }}><table style={{ minWidth: 640 }}>
+            <thead><tr style={{ borderBottom: `1px solid ${PALETTE.line}` }}><Th>Product</Th><Th align="right">Qty</Th><Th align="right">Amount</Th><Th align="right">COS</Th><Th align="right">Margin</Th><Th align="right">Margin %</Th></tr></thead>
+            <tbody>
+              {salesByProduct.map((g) => (
+                <React.Fragment key={g.name}>
+                  <tr><Td colSpan={6} style={{ paddingTop: 14, fontWeight: 700, color: PALETTE.accent, fontSize: 12.5, textTransform: "uppercase", letterSpacing: 0.3 }}>{g.name}</Td></tr>
+                  {g.items.map((it) => (
+                    <tr key={it.name} className="row-hover" style={{ borderBottom: `1px solid ${PALETTE.line}` }}>
+                      <Td style={{ paddingLeft: 20 }}>{it.name}</Td>
+                      <Td align="right" mono>{it.qty}</Td>
+                      <Td align="right" mono>{fmtMoney(it.amount)}</Td>
+                      <Td align="right" mono>{fmtMoney(it.cos)}</Td>
+                      <Td align="right" mono>{fmtMoney(it.margin)}</Td>
+                      <Td align="right" mono>{it.amount > 0 ? `${((it.margin / it.amount) * 100).toFixed(1)}%` : "—"}</Td>
+                    </tr>
+                  ))}
+                  <tr style={{ borderBottom: `1px solid ${PALETTE.line}` }}>
+                    <Td style={{ fontWeight: 700, fontSize: 12.5 }}>Total for {g.name}</Td>
+                    <Td align="right" mono style={{ fontWeight: 700 }}>{g.qty}</Td>
+                    <Td align="right" mono style={{ fontWeight: 700 }}>{fmtMoney(g.amount)}</Td>
+                    <Td align="right" mono style={{ fontWeight: 700 }}>{fmtMoney(g.cos)}</Td>
+                    <Td align="right" mono style={{ fontWeight: 700 }}>{fmtMoney(g.margin)}</Td>
+                    <Td align="right" mono style={{ fontWeight: 700 }}>{g.amount > 0 ? `${((g.margin / g.amount) * 100).toFixed(1)}%` : "—"}</Td>
+                  </tr>
+                </React.Fragment>
+              ))}
+              <tr style={{ borderTop: `2px solid ${PALETTE.ink}` }}>
+                <Td style={{ fontWeight: 700, fontSize: 14 }}>Grand Total</Td>
+                <Td></Td>
+                <Td align="right" mono style={{ fontWeight: 700, fontSize: 14 }}>{fmtMoney(salesByProductGrandTotal)}</Td>
+                <Td></Td><Td></Td><Td></Td>
+              </tr>
+            </tbody>
+          </table></div>
+        )}
+      </Card>
+
+      <PageHeader title="Profit & Loss" subtitle="Income, cost of sales, and expenses for the selected period" />
+      <Card style={{ marginBottom: 24 }}>
+        <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>Income</div>
+        {profitLoss.discountsGiven > 0 && (
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: PALETTE.inkSoft, padding: "4px 0" }}>
+            <span>Discounts given</span><span style={{ fontFamily: FONT.mono }}>-{fmtMoney(profitLoss.discountsGiven)}</span>
+          </div>
+        )}
+        {profitLoss.incomeRows.map((r) => (
+          <div key={r.name} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "4px 0" }}>
+            <span style={{ color: PALETTE.inkSoft }}>{r.name}</span><span style={{ fontFamily: FONT.mono }}>{fmtMoney(r.amount)}</span>
+          </div>
+        ))}
+        <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: 13.5, borderTop: `1px solid ${PALETTE.line}`, marginTop: 6, paddingTop: 8 }}>
+          <span>Total Income</span><span style={{ fontFamily: FONT.mono }}>{fmtMoney(profitLoss.totalIncome)}</span>
+        </div>
+
+        <div style={{ fontWeight: 700, fontSize: 13, marginTop: 20, marginBottom: 6 }}>Cost of Sales</div>
+        <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: 13.5, borderTop: `1px solid ${PALETTE.line}`, paddingTop: 8 }}>
+          <span>Total for Cost of Sales</span><span style={{ fontFamily: FONT.mono }}>{fmtMoney(profitLoss.cogsTotal)}</span>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: 15, marginTop: 16, color: PALETTE.credit }}>
+          <span>Gross Profit</span><span style={{ fontFamily: FONT.mono }}>{fmtMoney(profitLoss.grossProfit)}</span>
+        </div>
+
+        <div style={{ fontWeight: 700, fontSize: 13, marginTop: 20, marginBottom: 6 }}>Expenses</div>
+        {profitLoss.expenseRows.length === 0 ? <EmptyState text="No expenses for this period" /> : profitLoss.expenseRows.map((r) => (
+          <div key={r.name} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "4px 0" }}>
+            <span style={{ color: PALETTE.inkSoft }}>{r.name}</span><span style={{ fontFamily: FONT.mono }}>{fmtMoney(r.amount)}</span>
+          </div>
+        ))}
+        <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: 13.5, borderTop: `1px solid ${PALETTE.line}`, marginTop: 6, paddingTop: 8 }}>
+          <span>Total Expenses</span><span style={{ fontFamily: FONT.mono }}>{fmtMoney(profitLoss.totalExpenses)}</span>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: 17, marginTop: 18, paddingTop: 14, borderTop: `2px solid ${PALETTE.ink}`, color: profitLoss.netEarnings >= 0 ? PALETTE.credit : PALETTE.debit }}>
+          <span>Net Earnings</span><span style={{ fontFamily: FONT.mono }}>{fmtMoney(profitLoss.netEarnings)}</span>
+        </div>
+      </Card>
+
+      <PageHeader title="Trial Balance" subtitle="Debit and credit balances for every account — the two columns should match when the books are correct" />
       <Card>
         <div style={{ overflowX: "auto" }}><table style={{ minWidth: 560 }}>
           <thead><tr style={{ borderBottom: `2px solid ${PALETTE.ink}` }}><Th>Code</Th><Th>Account</Th><Th align="right">Debit</Th><Th align="right">Credit</Th></tr></thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.id} className="row-hover" style={{ borderBottom: `1px solid ${PALETTE.line}` }}>
-                <Td mono>{r.code}</Td><Td>{r.name}</Td><Td align="right" mono>{r.debit ? fmtMoney(r.debit) : "â"}</Td><Td align="right" mono>{r.credit ? fmtMoney(r.credit) : "â"}</Td>
+                <Td mono>{r.code}</Td><Td>{r.name}</Td><Td align="right" mono>{r.debit ? fmtMoney(r.debit) : "—"}</Td><Td align="right" mono>{r.credit ? fmtMoney(r.credit) : "—"}</Td>
               </tr>
             ))}
           </tbody>
@@ -2673,7 +3053,7 @@ function Reports({ accounts, balances, invoices, expenses, journal }) {
         </table></div>
         <div style={{ marginTop: 14, fontSize: 13, color: totalDebit === totalCredit ? PALETTE.credit : PALETTE.debit, display: "flex", alignItems: "center", gap: 6 }}>
           {totalDebit === totalCredit ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
-          {totalDebit === totalCredit ? "Books balance (Debit = Credit)" : "Books don't balance â check journal entries"}
+          {totalDebit === totalCredit ? "Books balance (Debit = Credit)" : "Books don't balance — check journal entries"}
         </div>
       </Card>
     </div>
@@ -2783,7 +3163,7 @@ function UsersPanel({ users, onAdd, onEdit, onDelete }) {
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 13.5, fontWeight: 600 }}>{u.name}</div>
                     <div style={{ fontSize: 11.5, color: PALETTE.inkSoft, marginTop: 2 }}>
-                      {u.role === "admin" ? "Admin â full access" : `Staff â ${Array.isArray(u.permissions) ? u.permissions.length : ALL_TABS.length} of ${ALL_TABS.length} menus`}
+                      {u.role === "admin" ? "Admin — full access" : `Staff — ${Array.isArray(u.permissions) ? u.permissions.length : ALL_TABS.length} of ${ALL_TABS.length} menus`}
                     </div>
                   </div>
                   <button className="pin-btn" onClick={() => startEdit(u)} style={{ background: "transparent", color: PALETTE.inkSoft, padding: 6 }}><Edit2 size={14} /></button>
@@ -2794,7 +3174,7 @@ function UsersPanel({ users, onAdd, onEdit, onDelete }) {
           ))}
         </div>
       </Card>
-      <p style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 12 }}>Note: this PIN system is a simple access control for your 4â5 trusted team members â not banking-grade security. Don't share the link outside your team.</p>
+      <p style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 12 }}>Note: this PIN system is a simple access control for your 4–5 trusted team members — not banking-grade security. Don't share the link outside your team.</p>
     </div>
   );
 }
