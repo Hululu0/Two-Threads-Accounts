@@ -562,6 +562,12 @@ export default function App() {
   const persistInvoices = async (n) => { setInvoices(n); await storageSet(KEYS.invoices, n); };
   const persistExpenses = async (n) => { setExpenses(n); await storageSet(KEYS.expenses, n); };
   const persistProducts = async (n) => { setProducts(n); await storageSet(KEYS.products, n); };
+  const quickAddProduct = async (fields) => {
+    const newProduct = { ...fields, id: uid("prod") };
+    await persistProducts([newProduct, ...products]);
+    showToast("Product added");
+    return newProduct;
+  };
   const persistBills = async (n) => { setBills(n); await storageSet(KEYS.bills, n); };
   const persistIncomeEntries = async (n) => { setIncomeEntries(n); await storageSet(KEYS.incomeEntries, n); };
 
@@ -690,7 +696,7 @@ export default function App() {
 
         {tab === "bills" && (
           <Bills
-            accounts={accounts} products={products} bills={bills} currentUser={currentUser} canEdit={canEditTab(currentUser, "bills")}
+            accounts={accounts} products={products} bills={bills} currentUser={currentUser} canEdit={canEditTab(currentUser, "bills")} onQuickAddProduct={quickAddProduct}
             onAdd={async (bill, journalEntry, qtyChanges) => {
               const je = { ...journalEntry, id: uid("je"), createdBy: currentUser.name };
               await persistJournal([je, ...journal]);
@@ -734,7 +740,7 @@ export default function App() {
 
         {tab === "invoices" && (
           <Invoices
-            accounts={accounts} products={products} invoices={invoices} currentUser={currentUser} canEdit={canEditTab(currentUser, "invoices")}
+            accounts={accounts} products={products} invoices={invoices} currentUser={currentUser} canEdit={canEditTab(currentUser, "invoices")} onQuickAddProduct={quickAddProduct}
             onAdd={async (invoice, cogsJournalEntry, qtyChanges, depositInfo) => {
               if (qtyChanges.length) {
                 const nextProducts = products.map((p) => {
@@ -1404,7 +1410,7 @@ function Inventory({ products, currentUser, canEdit, onAdd, onEdit, onDelete, on
    Bills — purchases that add stock (QuickBooks-style)
 --------------------------------------------------------- */
 
-function Bills({ accounts, products, bills, currentUser, canEdit, onAdd, onMarkPaid, onDelete }) {
+function Bills({ accounts, products, bills, currentUser, canEdit, onAdd, onMarkPaid, onDelete, onQuickAddProduct }) {
   const [open, setOpen] = useState(false);
   const [vendor, setVendor] = useState("");
   const [date, setDate] = useState(todayStr());
@@ -1412,6 +1418,8 @@ function Bills({ accounts, products, bills, currentUser, canEdit, onAdd, onMarkP
   const [paymentAccountId, setPaymentAccountId] = useState("");
   const [payFor, setPayFor] = useState(null);
   const [payAccount, setPayAccount] = useState("");
+  const [quickAddRow, setQuickAddRow] = useState(null);
+  const [quickAddForm, setQuickAddForm] = useState({ name: "", category: "", unit: "pcs", costPrice: "", salePrice: "" });
 
   const apAccount = accounts.find((a) => a.name === "Accounts Payable");
   const inventoryAccount = accounts.find((a) => a.name === "Inventory");
@@ -1427,6 +1435,23 @@ function Bills({ accounts, products, bills, currentUser, canEdit, onAdd, onMarkP
       if (p) next[i].cost = p.costPrice || "";
     }
     setItems(next);
+  };
+
+  const startQuickAdd = (i) => {
+    setQuickAddRow(i);
+    setQuickAddForm({ name: "", category: "", unit: "pcs", costPrice: "", salePrice: "" });
+  };
+  const confirmQuickAdd = async (i) => {
+    if (!quickAddForm.name.trim()) return;
+    const newProduct = await onQuickAddProduct({
+      name: quickAddForm.name.trim(), sku: "", category: quickAddForm.category.trim() || "Uncategorized",
+      unit: quickAddForm.unit.trim() || "pcs", qty: 0,
+      costPrice: Number(quickAddForm.costPrice) || 0, salePrice: Number(quickAddForm.salePrice) || 0,
+      reorderLevel: 3, photo: "",
+    });
+    updateItem(i, "productId", newProduct.id);
+    updateItem(i, "cost", newProduct.costPrice || "");
+    setQuickAddRow(null);
   };
 
   const submit = (e) => {
@@ -1454,10 +1479,7 @@ function Bills({ accounts, products, bills, currentUser, canEdit, onAdd, onMarkP
 
       {open && (
         <Card style={{ marginBottom: 20 }}>
-          {products.length === 0 ? (
-            <EmptyState text="Add a product in Inventory first, then you can record a bill for it." />
-          ) : (
-            <form onSubmit={submit}>
+          <form onSubmit={submit}>
               <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 160px", gap: 10 }}>
                 <div><label style={labelStyle}>Vendor</label><input style={inputStyle} value={vendor} onChange={(e) => setVendor(e.target.value)} placeholder="Supplier name" /></div>
                 <div><label style={labelStyle}>Date</label><input type="date" style={inputStyle} value={date} onChange={(e) => setDate(e.target.value)} /></div>
@@ -1465,15 +1487,34 @@ function Bills({ accounts, products, bills, currentUser, canEdit, onAdd, onMarkP
 
               <div style={{ marginTop: 14 }}>
                 <label style={labelStyle}>Items Purchased</label>
+                {products.length === 0 && <p style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 0 }}>No products yet — use "+ Add New Product" below to create one on the spot.</p>}
                 {items.map((it, i) => (
-                  <div key={i} className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 90px 120px 30px", gap: 8, marginBottom: 8 }}>
-                    <select style={inputStyle} value={it.productId} onChange={(e) => updateItem(i, "productId", e.target.value)}>
-                      <option value="">Select product</option>
-                      {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                    </select>
-                    <input style={inputStyle} type="number" placeholder="Qty" value={it.qty} onChange={(e) => updateItem(i, "qty", e.target.value)} />
-                    <input style={inputStyle} type="number" placeholder="Cost/unit" value={it.cost} onChange={(e) => updateItem(i, "cost", e.target.value)} />
-                    {items.length > 1 && <button type="button" className="pin-btn" onClick={() => setItems(items.filter((_, idx) => idx !== i))} style={{ background: "transparent", color: PALETTE.debit }}><Trash2 size={14} /></button>}
+                  <div key={i} style={{ marginBottom: 8 }}>
+                    <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 90px 120px 30px", gap: 8 }}>
+                      <select style={inputStyle} value={it.productId} onChange={(e) => { if (e.target.value === "__new__") startQuickAdd(i); else updateItem(i, "productId", e.target.value); }}>
+                        <option value="">Select product</option>
+                        <option value="__new__">+ Add New Product</option>
+                        {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                      <input style={inputStyle} type="number" placeholder="Qty" value={it.qty} onChange={(e) => updateItem(i, "qty", e.target.value)} />
+                      <input style={inputStyle} type="number" placeholder="Cost/unit" value={it.cost} onChange={(e) => updateItem(i, "cost", e.target.value)} />
+                      {items.length > 1 && <button type="button" className="pin-btn" onClick={() => setItems(items.filter((_, idx) => idx !== i))} style={{ background: "transparent", color: PALETTE.debit }}><Trash2 size={14} /></button>}
+                    </div>
+                    {quickAddRow === i && (
+                      <Card style={{ marginTop: 8, padding: 14, background: "rgba(255,255,255,0.04)" }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 8 }}>New Product</div>
+                        <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                          <input style={{ ...inputStyle, padding: "7px 10px" }} placeholder="Product name" value={quickAddForm.name} onChange={(e) => setQuickAddForm({ ...quickAddForm, name: e.target.value })} />
+                          <input style={{ ...inputStyle, padding: "7px 10px" }} placeholder="Category (optional)" value={quickAddForm.category} onChange={(e) => setQuickAddForm({ ...quickAddForm, category: e.target.value })} />
+                          <input style={{ ...inputStyle, padding: "7px 10px" }} type="number" placeholder="Cost price" value={quickAddForm.costPrice} onChange={(e) => setQuickAddForm({ ...quickAddForm, costPrice: e.target.value })} />
+                          <input style={{ ...inputStyle, padding: "7px 10px" }} type="number" placeholder="Sale price" value={quickAddForm.salePrice} onChange={(e) => setQuickAddForm({ ...quickAddForm, salePrice: e.target.value })} />
+                        </div>
+                        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                          <button type="button" className="pin-btn" onClick={() => confirmQuickAdd(i)} style={{ background: PALETTE.credit, color: "#fff", fontSize: 12, padding: "6px 14px", borderRadius: 999 }}>Create & Use</button>
+                          <button type="button" className="pin-btn" onClick={() => setQuickAddRow(null)} style={{ background: "transparent", color: PALETTE.inkSoft, fontSize: 12 }}>Cancel</button>
+                        </div>
+                      </Card>
+                    )}
                   </div>
                 ))}
                 <GhostButton onClick={() => setItems([...items, { productId: "", qty: 1, cost: "" }])}>+ Add another item</GhostButton>
@@ -1492,8 +1533,7 @@ function Bills({ accounts, products, bills, currentUser, canEdit, onAdd, onMarkP
                 <div style={{ fontFamily: FONT.mono, fontSize: 16 }}>Total: {fmtMoney(total)}</div>
                 <PrimaryButton type="submit">Save Bill</PrimaryButton>
               </div>
-            </form>
-          )}
+          </form>
         </Card>
       )}
 
@@ -1538,7 +1578,7 @@ function Bills({ accounts, products, bills, currentUser, canEdit, onAdd, onMarkP
    Invoices — items can link to inventory products
 --------------------------------------------------------- */
 
-function Invoices({ accounts, products, invoices, currentUser, canEdit, onAdd, onEdit, onRecordPayment, onDelete, onBulkImport }) {
+function Invoices({ accounts, products, invoices, currentUser, canEdit, onAdd, onEdit, onRecordPayment, onDelete, onBulkImport, onQuickAddProduct }) {
   const [open, setOpen] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState(null);
   const [customer, setCustomer] = useState("");
@@ -1557,6 +1597,8 @@ function Invoices({ accounts, products, invoices, currentUser, canEdit, onAdd, o
   const [importMsg, setImportMsg] = useState("");
   const [viewingInvoice, setViewingInvoice] = useState(null);
   const [payingInvoice, setPayingInvoice] = useState(null);
+  const [quickAddRow, setQuickAddRow] = useState(null);
+  const [quickAddForm, setQuickAddForm] = useState({ name: "", category: "", unit: "pcs", costPrice: "", salePrice: "" });
 
   const incomeAccount = accounts.find((a) => a.type === "income");
   const inventoryAccount = accounts.find((a) => a.name === "Inventory");
@@ -1575,6 +1617,22 @@ function Invoices({ accounts, products, invoices, currentUser, canEdit, onAdd, o
       else { next[i].desc = ""; }
     }
     setItems(next);
+  };
+
+  const startQuickAdd = (i) => {
+    setQuickAddRow(i);
+    setQuickAddForm({ name: "", category: "", unit: "pcs", costPrice: "", salePrice: "" });
+  };
+  const confirmQuickAdd = async (i) => {
+    if (!quickAddForm.name.trim()) return;
+    const newProduct = await onQuickAddProduct({
+      name: quickAddForm.name.trim(), sku: "", category: quickAddForm.category.trim() || "Uncategorized",
+      unit: quickAddForm.unit.trim() || "pcs", qty: 0,
+      costPrice: Number(quickAddForm.costPrice) || 0, salePrice: Number(quickAddForm.salePrice) || 0,
+      reorderLevel: 3, photo: "",
+    });
+    updateItem(i, "productId", newProduct.id);
+    setQuickAddRow(null);
   };
 
   const startEditInvoice = (inv) => {
@@ -1823,8 +1881,9 @@ function Invoices({ accounts, products, invoices, currentUser, canEdit, onAdd, o
                 return (
                   <div key={i} style={{ padding: "8px 10px", borderTop: `1px solid ${PALETTE.line}` }}>
                     <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "160px 1fr 70px 100px 30px", gap: 8 }}>
-                      <select style={inputStyle} value={it.productId} onChange={(e) => updateItem(i, "productId", e.target.value)}>
+                      <select style={inputStyle} value={it.productId} onChange={(e) => { if (e.target.value === "__new__") startQuickAdd(i); else updateItem(i, "productId", e.target.value); }}>
                         <option value="">Other</option>
+                        <option value="__new__">+ Add New Product</option>
                         {products.map((pr) => <option key={pr.id} value={pr.id}>{pr.name}</option>)}
                       </select>
                       <input style={inputStyle} placeholder="Description" value={it.desc} onChange={(e) => updateItem(i, "desc", e.target.value)} disabled={!!it.productId} />
@@ -1835,6 +1894,22 @@ function Invoices({ accounts, products, invoices, currentUser, canEdit, onAdd, o
                     {p && <div style={{ fontSize: 11, color: short ? PALETTE.debit : PALETTE.inkSoft, marginTop: 4 }}>
                       {p.qty} {p.unit} in stock{short ? " — not enough stock, this will oversell" : ""}
                     </div>}
+                    {quickAddRow === i && (
+                      <Card style={{ marginTop: 8, padding: 14, background: "rgba(255,255,255,0.04)" }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 8 }}>New Product</div>
+                        <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                          <input style={{ ...inputStyle, padding: "7px 10px" }} placeholder="Product name" value={quickAddForm.name} onChange={(e) => setQuickAddForm({ ...quickAddForm, name: e.target.value })} />
+                          <input style={{ ...inputStyle, padding: "7px 10px" }} placeholder="Category (optional)" value={quickAddForm.category} onChange={(e) => setQuickAddForm({ ...quickAddForm, category: e.target.value })} />
+                          <input style={{ ...inputStyle, padding: "7px 10px" }} type="number" placeholder="Cost price" value={quickAddForm.costPrice} onChange={(e) => setQuickAddForm({ ...quickAddForm, costPrice: e.target.value })} />
+                          <input style={{ ...inputStyle, padding: "7px 10px" }} type="number" placeholder="Sale price" value={quickAddForm.salePrice} onChange={(e) => setQuickAddForm({ ...quickAddForm, salePrice: e.target.value })} />
+                        </div>
+                        <p style={{ fontSize: 11, color: PALETTE.inkSoft, margin: "8px 0 0" }}>This creates the product with 0 stock — selling it here will take that stock negative until you record a Bill to stock it in.</p>
+                        <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                          <button type="button" className="pin-btn" onClick={() => confirmQuickAdd(i)} style={{ background: PALETTE.credit, color: "#fff", fontSize: 12, padding: "6px 14px", borderRadius: 999 }}>Create & Use</button>
+                          <button type="button" className="pin-btn" onClick={() => setQuickAddRow(null)} style={{ background: "transparent", color: PALETTE.inkSoft, fontSize: 12 }}>Cancel</button>
+                        </div>
+                      </Card>
+                    )}
                   </div>
                 );
               })}
