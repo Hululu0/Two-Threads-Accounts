@@ -56,6 +56,25 @@ const ALL_TABS = [
 const MEDIA_OPTIONS = ["Facebook", "Instagram", "TikTok", "WhatsApp", "Website", "Walk-in", "Other"];
 const PRODUCT_COLORS = ["#F4A896", "#8FBFA3", "#F2C078", "#9FB8DD", "#D9A6C2", "#B7C4A8", "#E9A178", "#A9C9D9"];
 
+// Per-tab access control. `user.permissions` can be:
+//  - undefined/null      -> legacy staff created before permissions existed: full access everywhere
+//  - an array of strings -> legacy format: listed tabs are visible with full edit access
+//  - an object {tabKey: "view" | "edit"} -> current format, per-tab granularity
+// Admins always have full edit access to everything.
+function hasAccess(user, tabKey, level) {
+  if (!user) return false;
+  if (user.role === "admin") return true;
+  const perms = user.permissions;
+  if (perms == null) return true;
+  if (Array.isArray(perms)) return perms.includes(tabKey);
+  const lvl = perms[tabKey];
+  if (!lvl) return false;
+  if (level === "view") return lvl === "view" || lvl === "edit";
+  return lvl === "edit";
+}
+function canView(user, tabKey) { return hasAccess(user, tabKey, "view"); }
+function canEditTab(user, tabKey) { return hasAccess(user, tabKey, "edit"); }
+
 function uid(prefix = "id") {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -564,7 +583,7 @@ export default function App() {
   useEffect(() => {
     if (!currentUser) return;
     if (tab === "users" && currentUser.role !== "admin") { setTab("dashboard"); return; }
-    if (currentUser.role !== "admin" && Array.isArray(currentUser.permissions) && !currentUser.permissions.includes(tab)) {
+    if (currentUser.role !== "admin" && !canView(currentUser, tab)) {
       setTab("dashboard");
     }
   }, [tab, currentUser]);
@@ -657,7 +676,7 @@ export default function App() {
 
         {tab === "inventory" && (
           <Inventory
-            products={products} currentUser={currentUser}
+            products={products} currentUser={currentUser} canEdit={canEditTab(currentUser, "inventory")}
             onAdd={async (p) => { await persistProducts([{ ...p, id: uid("prod") }, ...products]); showToast("Product added"); }}
             onEdit={async (id, updates) => { await persistProducts(products.map((p) => (p.id === id ? { ...p, ...updates } : p))); showToast("Product updated"); }}
             onDelete={async (id) => { await persistProducts(products.filter((p) => p.id !== id)); showToast("Product deleted"); }}
@@ -671,7 +690,7 @@ export default function App() {
 
         {tab === "bills" && (
           <Bills
-            accounts={accounts} products={products} bills={bills} currentUser={currentUser}
+            accounts={accounts} products={products} bills={bills} currentUser={currentUser} canEdit={canEditTab(currentUser, "bills")}
             onAdd={async (bill, journalEntry, qtyChanges) => {
               const je = { ...journalEntry, id: uid("je"), createdBy: currentUser.name };
               await persistJournal([je, ...journal]);
@@ -715,7 +734,7 @@ export default function App() {
 
         {tab === "invoices" && (
           <Invoices
-            accounts={accounts} products={products} invoices={invoices} currentUser={currentUser}
+            accounts={accounts} products={products} invoices={invoices} currentUser={currentUser} canEdit={canEditTab(currentUser, "invoices")}
             onAdd={async (invoice, cogsJournalEntry, qtyChanges, depositInfo) => {
               if (qtyChanges.length) {
                 const nextProducts = products.map((p) => {
@@ -820,7 +839,7 @@ export default function App() {
 
         {tab === "expenses" && (
           <Expenses
-            accounts={accounts} expenses={expenses} currentUser={currentUser}
+            accounts={accounts} expenses={expenses} currentUser={currentUser} canEdit={canEditTab(currentUser, "expenses")}
             onAdd={async (expense, journalEntry) => {
               const je = { ...journalEntry, id: uid("je"), createdBy: currentUser.name };
               await persistJournal([je, ...journal]);
@@ -855,7 +874,7 @@ export default function App() {
 
         {tab === "income" && (
           <IncomeTab
-            accounts={accounts} incomeEntries={incomeEntries} currentUser={currentUser}
+            accounts={accounts} incomeEntries={incomeEntries} currentUser={currentUser} canEdit={canEditTab(currentUser, "income")}
             onAddCategory={async (acc) => { await persistAccounts([...accounts, { ...acc, id: uid("acc") }]); return acc; }}
             onAdd={async (entry, journalEntry) => {
               const je = { ...journalEntry, id: uid("je"), createdBy: currentUser.name };
@@ -881,7 +900,7 @@ export default function App() {
 
         {tab === "accounts" && (
           <ChartOfAccounts
-            accounts={accounts} balances={balances} currentUser={currentUser}
+            accounts={accounts} balances={balances} currentUser={currentUser} canEdit={canEditTab(currentUser, "accounts")}
             onAdd={async (acc) => { await persistAccounts([...accounts, { ...acc, id: uid("acc") }]); showToast("Account added"); }}
             onAddMany={async (accs) => { await persistAccounts([...accounts, ...accs.map((a) => ({ ...a, id: uid("acc") }))]); showToast(`${accs.length} accounts added`); }}
             onEdit={async (id, updates) => { await persistAccounts(accounts.map((a) => (a.id === id ? { ...a, ...updates } : a))); showToast("Account updated"); }}
@@ -921,7 +940,7 @@ export default function App() {
 
         {tab === "journal" && (
           <Journal
-            accounts={accounts} journal={journal} currentUser={currentUser}
+            accounts={accounts} journal={journal} currentUser={currentUser} canEdit={canEditTab(currentUser, "journal")}
             onAdd={async (entry) => { await persistJournal([{ ...entry, id: uid("je"), createdBy: currentUser.name }, ...journal]); showToast("Journal entry added"); }}
             onDelete={async (id) => { await persistJournal(journal.filter((j) => j.id !== id)); showToast("Entry deleted"); }}
           />
@@ -1004,10 +1023,7 @@ function LoginScreen({ users, onCreateFirstAdmin, onLogin }) {
 
 function Sidebar({ tab, setTab, currentUser, onLogout, mobileOpen, onCloseMobile }) {
   const iconMap = { dashboard: LayoutDashboard, invoices: FileText, bills: ClipboardList, expenses: Wallet, income: TrendingUp, inventory: Package, accounts: ScrollText, journal: Receipt, reports: PieChart };
-  const allowed = currentUser.role === "admin" || !Array.isArray(currentUser.permissions)
-    ? ALL_TABS.map((t) => t.key)
-    : currentUser.permissions;
-  const items = ALL_TABS.filter((t) => allowed.includes(t.key)).map((t) => ({ ...t, icon: iconMap[t.key] }));
+  const items = ALL_TABS.filter((t) => canView(currentUser, t.key)).map((t) => ({ ...t, icon: iconMap[t.key] }));
   if (currentUser.role === "admin") items.push({ key: "users", label: "Users", icon: User });
 
   return (
@@ -1132,7 +1148,7 @@ function Dashboard({ accounts, balances, journal, products }) {
    Inventory — Pinterest-style product grid
 --------------------------------------------------------- */
 
-function Inventory({ products, currentUser, onAdd, onEdit, onDelete, onImport }) {
+function Inventory({ products, currentUser, canEdit, onAdd, onEdit, onDelete, onImport }) {
   const [open, setOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [form, setForm] = useState({ name: "", sku: "", category: "", unit: "pcs", qty: "", costPrice: "", salePrice: "", reorderLevel: "3", photo: "" });
@@ -1140,7 +1156,7 @@ function Inventory({ products, currentUser, onAdd, onEdit, onDelete, onImport })
   const [importMsg, setImportMsg] = useState("");
   const [search, setSearch] = useState("");
   const [photoBusy, setPhotoBusy] = useState(false);
-  const isAdmin = currentUser.role === "admin";
+  const isAdmin = canEdit;
 
   const filteredProducts = products.filter((p) => {
     const q = search.trim().toLowerCase();
@@ -1383,7 +1399,7 @@ function Inventory({ products, currentUser, onAdd, onEdit, onDelete, onImport })
    Bills — purchases that add stock (QuickBooks-style)
 --------------------------------------------------------- */
 
-function Bills({ accounts, products, bills, currentUser, onAdd, onMarkPaid, onDelete }) {
+function Bills({ accounts, products, bills, currentUser, canEdit, onAdd, onMarkPaid, onDelete }) {
   const [open, setOpen] = useState(false);
   const [vendor, setVendor] = useState("");
   const [date, setDate] = useState(todayStr());
@@ -1428,7 +1444,7 @@ function Bills({ accounts, products, bills, currentUser, onAdd, onMarkPaid, onDe
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
         <PageHeader title="Bills" subtitle="Record a purchase — stock is added to inventory automatically" />
-        <PrimaryButton onClick={() => setOpen((v) => !v)}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Bill"}</PrimaryButton>
+        {canEdit && <PrimaryButton onClick={() => setOpen((v) => !v)}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Bill"}</PrimaryButton>}
       </div>
 
       {open && (
@@ -1487,7 +1503,7 @@ function Bills({ accounts, products, bills, currentUser, onAdd, onMarkPaid, onDe
                   <Td><Badge tone={b.status === "paid" ? "good" : "bad"}>{b.status === "paid" ? "Paid" : "Unpaid"}</Badge></Td>
                   <Td>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      {b.status !== "paid" && (
+                      {canEdit && b.status !== "paid" && (
                         payFor === b.id ? (
                           <>
                             <select style={{ ...inputStyle, padding: "4px 6px", fontSize: 12, width: "auto" }} value={payAccount} onChange={(e) => setPayAccount(e.target.value)}>
@@ -1500,7 +1516,7 @@ function Bills({ accounts, products, bills, currentUser, onAdd, onMarkPaid, onDe
                           <GhostButton onClick={() => setPayFor(b.id)}>Mark Paid</GhostButton>
                         )
                       )}
-                      {currentUser.role === "admin" && <button className="pin-btn" onClick={() => onDelete(b)} style={{ background: "transparent", color: PALETTE.debit }}><Trash2 size={14} /></button>}
+                      {canEdit && <button className="pin-btn" onClick={() => onDelete(b)} style={{ background: "transparent", color: PALETTE.debit }}><Trash2 size={14} /></button>}
                     </div>
                   </Td>
                 </tr>
@@ -1517,7 +1533,7 @@ function Bills({ accounts, products, bills, currentUser, onAdd, onMarkPaid, onDe
    Invoices — items can link to inventory products
 --------------------------------------------------------- */
 
-function Invoices({ accounts, products, invoices, currentUser, onAdd, onEdit, onRecordPayment, onDelete, onBulkImport }) {
+function Invoices({ accounts, products, invoices, currentUser, canEdit, onAdd, onEdit, onRecordPayment, onDelete, onBulkImport }) {
   const [open, setOpen] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState(null);
   const [customer, setCustomer] = useState("");
@@ -1734,7 +1750,7 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onEdit, on
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
         <PageHeader title="Invoices" subtitle="Create a new invoice — inventory and journal entries update automatically" />
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          {currentUser.role === "admin" && (
+          {canEdit && (
             <label className="pin-btn" style={{
               display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.08)", color: PALETTE.ink,
               padding: "10px 16px", borderRadius: 999, fontSize: 13.5, fontWeight: 600, border: `1px solid ${PALETTE.line}`, cursor: "pointer",
@@ -1744,7 +1760,7 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onEdit, on
               <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} style={{ display: "none" }} />
             </label>
           )}
-          <PrimaryButton onClick={() => (open ? cancelForm() : setOpen(true))}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Invoice"}</PrimaryButton>
+          {canEdit && <PrimaryButton onClick={() => (open ? cancelForm() : setOpen(true))}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Invoice"}</PrimaryButton>}
         </div>
       </div>
 
@@ -1890,10 +1906,10 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onEdit, on
                     <Td><Badge tone={statusTone}>{statusLabel}</Badge></Td>
                     <Td>
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        {inv.status !== "paid" && (
+                        {canEdit && inv.status !== "paid" && (
                           <GhostButton onClick={() => setPayingInvoice(inv)}>Receive Payment</GhostButton>
                         )}
-                        {currentUser.role === "admin" && (
+                        {canEdit && (
                           <>
                             <button className="pin-btn" onClick={() => startEditInvoice(inv)} style={{ background: "transparent", color: PALETTE.inkSoft }}><Edit2 size={14} /></button>
                             <button className="pin-btn" onClick={() => onDelete(inv)} style={{ background: "transparent", color: PALETTE.debit }}><Trash2 size={14} /></button>
@@ -1913,8 +1929,8 @@ function Invoices({ accounts, products, invoices, currentUser, onAdd, onEdit, on
         <InvoiceDetailModal
           invoice={viewingInvoice}
           onClose={() => setViewingInvoice(null)}
-          onEdit={currentUser.role === "admin" ? () => startEditInvoice(viewingInvoice) : null}
-          onReceivePayment={viewingInvoice.status !== "paid" ? () => { setPayingInvoice(viewingInvoice); setViewingInvoice(null); } : null}
+          onEdit={canEdit ? () => startEditInvoice(viewingInvoice) : null}
+          onReceivePayment={canEdit && viewingInvoice.status !== "paid" ? () => { setPayingInvoice(viewingInvoice); setViewingInvoice(null); } : null}
         />
       )}
       {payingInvoice && (
@@ -2079,7 +2095,7 @@ function InvoiceDetailModal({ invoice, onClose, onEdit, onReceivePayment }) {
    Expenses
 --------------------------------------------------------- */
 
-function Expenses({ accounts, expenses, currentUser, onAdd, onEdit, onDelete, onBulkImport }) {
+function Expenses({ accounts, expenses, currentUser, canEdit, onAdd, onEdit, onDelete, onBulkImport }) {
   const [open, setOpen] = useState(false);
   const [date, setDate] = useState(todayStr());
   const [vendor, setVendor] = useState("");
@@ -2225,7 +2241,7 @@ function Expenses({ accounts, expenses, currentUser, onAdd, onEdit, onDelete, on
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
         <PageHeader title="Expenses" subtitle="Operating costs like rent, utilities, and salaries" />
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          {currentUser.role === "admin" && (
+          {canEdit && (
             <label className="pin-btn" style={{
               display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.08)", color: PALETTE.ink,
               padding: "10px 16px", borderRadius: 999, fontSize: 13.5, fontWeight: 600, border: `1px solid ${PALETTE.line}`, cursor: "pointer",
@@ -2235,7 +2251,7 @@ function Expenses({ accounts, expenses, currentUser, onAdd, onEdit, onDelete, on
               <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} style={{ display: "none" }} />
             </label>
           )}
-          <PrimaryButton onClick={() => setOpen((v) => !v)}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Expense"}</PrimaryButton>
+          {canEdit && <PrimaryButton onClick={() => setOpen((v) => !v)}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Expense"}</PrimaryButton>}
         </div>
       </div>
 
@@ -2302,7 +2318,7 @@ function Expenses({ accounts, expenses, currentUser, onAdd, onEdit, onDelete, on
                     <Td style={{ color: PALETTE.inkSoft, fontSize: 12.5 }}>{paidFrom?.name || "—"}</Td>
                     <Td align="right" mono>{fmtMoney(exp.amount)}</Td><Td>{exp.createdBy}</Td>
                     <Td>
-                      {currentUser.role === "admin" && (
+                      {canEdit && (
                         <div style={{ display: "flex", gap: 2 }}>
                           <button className="pin-btn" onClick={() => startEdit(exp)} style={{ background: "transparent", color: PALETTE.inkSoft, padding: 5 }}><Edit2 size={14} /></button>
                           <button className="pin-btn" onClick={() => onDelete(exp)} style={{ background: "transparent", color: PALETTE.debit, padding: 5 }}><Trash2 size={14} /></button>
@@ -2324,7 +2340,7 @@ function Expenses({ accounts, expenses, currentUser, onAdd, onEdit, onDelete, on
    Income — manual/other income (loans, investor funds, etc.)
 --------------------------------------------------------- */
 
-function IncomeTab({ accounts, incomeEntries, currentUser, onAdd, onEdit, onDelete, onAddCategory }) {
+function IncomeTab({ accounts, incomeEntries, currentUser, canEdit, onAdd, onEdit, onDelete, onAddCategory }) {
   const [open, setOpen] = useState(false);
   const [date, setDate] = useState(todayStr());
   const [source, setSource] = useState("");
@@ -2382,7 +2398,7 @@ function IncomeTab({ accounts, incomeEntries, currentUser, onAdd, onEdit, onDele
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
         <PageHeader title="Income" subtitle="Record money coming in that isn't a product sale — loans, investor funds, refunds, etc." />
-        <PrimaryButton onClick={() => setOpen((v) => !v)}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Income"}</PrimaryButton>
+        {canEdit && <PrimaryButton onClick={() => setOpen((v) => !v)}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Income"}</PrimaryButton>}
       </div>
 
       {open && (
@@ -2458,7 +2474,7 @@ function IncomeTab({ accounts, incomeEntries, currentUser, onAdd, onEdit, onDele
                     <Td align="right" mono style={{ color: PALETTE.credit }}>{fmtMoney(entry.amount)}</Td>
                     <Td>{entry.createdBy}</Td>
                     <Td>
-                      {currentUser.role === "admin" && (
+                      {canEdit && (
                         <div style={{ display: "flex", gap: 2 }}>
                           <button className="pin-btn" onClick={() => startEdit(entry)} style={{ background: "transparent", color: PALETTE.inkSoft, padding: 5 }}><Edit2 size={14} /></button>
                           <button className="pin-btn" onClick={() => onDelete(entry)} style={{ background: "transparent", color: PALETTE.debit, padding: 5 }}><Trash2 size={14} /></button>
@@ -2480,7 +2496,7 @@ function IncomeTab({ accounts, incomeEntries, currentUser, onAdd, onEdit, onDele
    Chart of Accounts
 --------------------------------------------------------- */
 
-function ChartOfAccounts({ accounts, balances, currentUser, onAdd, onAddMany, onEdit, onDelete, onAdjustBalance, onTransfer }) {
+function ChartOfAccounts({ accounts, balances, currentUser, canEdit, onAdd, onAddMany, onEdit, onDelete, onAdjustBalance, onTransfer }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ code: "", name: "", type: "asset" });
   const [editingId, setEditingId] = useState(null);
@@ -2489,7 +2505,7 @@ function ChartOfAccounts({ accounts, balances, currentUser, onAdd, onAddMany, on
   const [balanceForm, setBalanceForm] = useState({ amount: "", date: todayStr(), note: "" });
   const [transferOpen, setTransferOpen] = useState(false);
   const [transferForm, setTransferForm] = useState({ from: "", to: "", amount: "", date: todayStr(), note: "" });
-  const isAdmin = currentUser.role === "admin";
+  const isAdmin = canEdit;
   const grouped = ACCOUNT_TYPES.map((t) => ({ ...t, items: accounts.filter((a) => a.type === t.key) }));
 
   const missingCategories = STANDARD_EXPENSE_CATEGORIES.filter(
@@ -2653,12 +2669,12 @@ function ChartOfAccounts({ accounts, balances, currentUser, onAdd, onAddMany, on
    Journal
 --------------------------------------------------------- */
 
-function Journal({ accounts, journal, currentUser, onAdd, onDelete }) {
+function Journal({ accounts, journal, currentUser, canEdit, onAdd, onDelete }) {
   const [open, setOpen] = useState(false);
   const [date, setDate] = useState(todayStr());
   const [memo, setMemo] = useState("");
   const [lines, setLines] = useState([{ accountId: accounts[0]?.id || "", debit: "", credit: "" }, { accountId: accounts[1]?.id || "", debit: "", credit: "" }]);
-  const isAdmin = currentUser.role === "admin";
+  const isAdmin = canEdit;
   const totalDebit = lines.reduce((s, l) => s + (Number(l.debit) || 0), 0);
   const totalCredit = lines.reduce((s, l) => s + (Number(l.credit) || 0), 0);
   const balanced = totalDebit > 0 && totalDebit === totalCredit;
@@ -3069,53 +3085,96 @@ function UsersPanel({ users, onAdd, onEdit, onDelete }) {
   const [name, setName] = useState("");
   const [pin, setPin] = useState("");
   const [role, setRole] = useState("staff");
-  const [permissions, setPermissions] = useState(ALL_TABS.map((t) => t.key));
+  const defaultPerms = () => {
+    const p = {};
+    ALL_TABS.forEach((t) => { p[t.key] = "edit"; });
+    return p;
+  };
+  const [permissions, setPermissions] = useState(defaultPerms());
   const [editingId, setEditingId] = useState(null);
   const [editRole, setEditRole] = useState("staff");
-  const [editPermissions, setEditPermissions] = useState([]);
+  const [editPermissions, setEditPermissions] = useState({});
 
-  const togglePerm = (key, list, setList) => {
-    if (key === "dashboard") return; // always included
-    setList(list.includes(key) ? list.filter((k) => k !== key) : [...list, key]);
+  // Normalize any stored permissions (old array format or new object format) into
+  // the {tabKey: "view"|"edit"} object shape this panel works with.
+  const normalizePerms = (perms) => {
+    if (!perms) return defaultPerms();
+    if (Array.isArray(perms)) {
+      const p = {};
+      perms.forEach((k) => { p[k] = "edit"; });
+      return p;
+    }
+    return { ...perms };
+  };
+
+  const setLevel = (map, setMap, key, level) => {
+    if (key === "dashboard") return; // always view, can't be restricted further
+    const next = { ...map };
+    if (level === "none") delete next[key];
+    else next[key] = level;
+    setMap(next);
   };
 
   const submit = (e) => {
     e.preventDefault();
     if (!name.trim() || pin.trim().length < 4) return;
-    onAdd({ name: name.trim(), pin: pin.trim(), role, permissions: role === "staff" ? permissions : ALL_TABS.map((t) => t.key) });
-    setName(""); setPin(""); setRole("staff"); setPermissions(ALL_TABS.map((t) => t.key)); setOpen(false);
+    const perms = { ...permissions, dashboard: "view" };
+    onAdd({ name: name.trim(), pin: pin.trim(), role, permissions: role === "staff" ? perms : defaultPerms() });
+    setName(""); setPin(""); setRole("staff"); setPermissions(defaultPerms()); setOpen(false);
   };
 
   const startEdit = (u) => {
     setEditingId(u.id);
     setEditRole(u.role);
-    setEditPermissions(Array.isArray(u.permissions) ? u.permissions : ALL_TABS.map((t) => t.key));
+    setEditPermissions(normalizePerms(u.permissions));
   };
   const saveEdit = (id) => {
-    onEdit(id, { role: editRole, permissions: editRole === "staff" ? editPermissions : ALL_TABS.map((t) => t.key) });
+    const perms = { ...editPermissions, dashboard: "view" };
+    onEdit(id, { role: editRole, permissions: editRole === "staff" ? perms : defaultPerms() });
     setEditingId(null);
   };
 
-  const PermGrid = ({ list, setList, disabled }) => (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px,1fr))", gap: 6, marginTop: 4 }}>
-      {ALL_TABS.map((t) => (
-        <label key={t.key} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: disabled ? PALETTE.inkSoft : PALETTE.ink, opacity: t.key === "dashboard" ? 0.6 : 1 }}>
-          <input
-            type="checkbox"
-            checked={t.key === "dashboard" ? true : list.includes(t.key)}
-            disabled={disabled || t.key === "dashboard"}
-            onChange={() => togglePerm(t.key, list, setList)}
-          />
-          {t.label}
-        </label>
-      ))}
+  const summaryFor = (u) => {
+    if (u.role === "admin") return "Admin — full access";
+    const perms = normalizePerms(u.permissions);
+    const editCount = Object.values(perms).filter((v) => v === "edit").length;
+    const viewCount = Object.values(perms).filter((v) => v === "view").length;
+    return `Staff — ${editCount} editable, ${viewCount} view-only of ${ALL_TABS.length} menus`;
+  };
+
+  const PermTable = ({ map, setMap }) => (
+    <div style={{ marginTop: 4 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, padding: "4px 0", fontSize: 10.5, color: PALETTE.inkSoft, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.3 }}>
+        <span>Menu</span><span>Access</span>
+      </div>
+      {ALL_TABS.map((t) => {
+        const level = t.key === "dashboard" ? "view" : (map[t.key] || "none");
+        return (
+          <div key={t.key} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderTop: `1px solid ${PALETTE.line}` }}>
+            <span style={{ fontSize: 13, color: t.key === "dashboard" ? PALETTE.inkSoft : PALETTE.ink }}>{t.label}</span>
+            {t.key === "dashboard" ? (
+              <span style={{ fontSize: 11.5, color: PALETTE.inkSoft }}>Always visible</span>
+            ) : (
+              <select
+                style={{ ...inputStyle, width: 130, padding: "5px 8px", fontSize: 12 }}
+                value={level}
+                onChange={(e) => setLevel(map, setMap, t.key, e.target.value)}
+              >
+                <option value="none">No access</option>
+                <option value="view">View only</option>
+                <option value="edit">Can edit</option>
+              </select>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
-        <PageHeader title="Users" subtitle="Manage your team's access and which menus each person can see" />
+        <PageHeader title="Users" subtitle="Manage your team's access — choose which menus each person can see, and whether they can edit or just view" />
         <PrimaryButton onClick={() => setOpen((v) => !v)}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New User"}</PrimaryButton>
       </div>
 
@@ -3130,8 +3189,8 @@ function UsersPanel({ users, onAdd, onEdit, onDelete }) {
             {role === "staff" && (
               <div style={{ marginTop: 14 }}>
                 <label style={labelStyle}>Menu Access</label>
-                <p style={{ fontSize: 11.5, color: PALETTE.inkSoft, margin: "2px 0 4px" }}>Choose which tabs this person can see. Dashboard is always visible.</p>
-                <PermGrid list={permissions} setList={setPermissions} />
+                <p style={{ fontSize: 11.5, color: PALETTE.inkSoft, margin: "2px 0 4px" }}>For each menu, choose whether this person can't see it, can only view it, or can add/edit/delete in it.</p>
+                <PermTable map={permissions} setMap={setPermissions} />
               </div>
             )}
             <PrimaryButton type="submit" style={{ marginTop: 16 }}>Add User</PrimaryButton>
@@ -3152,7 +3211,7 @@ function UsersPanel({ users, onAdd, onEdit, onDelete }) {
                       <option value="admin">Admin</option>
                     </select>
                   </div>
-                  {editRole === "staff" && <PermGrid list={editPermissions} setList={setEditPermissions} />}
+                  {editRole === "staff" && <PermTable map={editPermissions} setMap={setEditPermissions} />}
                   <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                     <button className="pin-btn" onClick={() => saveEdit(u.id)} style={{ background: PALETTE.credit, color: "#fff", fontSize: 12, padding: "6px 14px", borderRadius: 999 }}>Save</button>
                     <button className="pin-btn" onClick={() => setEditingId(null)} style={{ background: "transparent", color: PALETTE.inkSoft, fontSize: 12 }}>Cancel</button>
@@ -3162,9 +3221,7 @@ function UsersPanel({ users, onAdd, onEdit, onDelete }) {
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 13.5, fontWeight: 600 }}>{u.name}</div>
-                    <div style={{ fontSize: 11.5, color: PALETTE.inkSoft, marginTop: 2 }}>
-                      {u.role === "admin" ? "Admin — full access" : `Staff — ${Array.isArray(u.permissions) ? u.permissions.length : ALL_TABS.length} of ${ALL_TABS.length} menus`}
-                    </div>
+                    <div style={{ fontSize: 11.5, color: PALETTE.inkSoft, marginTop: 2 }}>{summaryFor(u)}</div>
                   </div>
                   <button className="pin-btn" onClick={() => startEdit(u)} style={{ background: "transparent", color: PALETTE.inkSoft, padding: 6 }}><Edit2 size={14} /></button>
                   <button className="pin-btn" onClick={() => onDelete(u.id)} style={{ background: "transparent", color: PALETTE.debit, padding: 6 }}><Trash2 size={14} /></button>
