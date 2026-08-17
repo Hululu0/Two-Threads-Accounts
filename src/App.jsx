@@ -1449,19 +1449,23 @@ function Bills({ accounts, products, bills, currentUser, canEdit, onAdd, onMarkP
       costPrice: Number(quickAddForm.costPrice) || 0, salePrice: Number(quickAddForm.salePrice) || 0,
       reorderLevel: 3, photo: "",
     });
-    updateItem(i, "productId", newProduct.id);
-    updateItem(i, "cost", newProduct.costPrice || "");
+    setItems((prev) => {
+      const next = [...prev];
+      next[i] = { ...next[i], productId: newProduct.id, cost: newProduct.costPrice || "" };
+      return next;
+    });
     setQuickAddRow(null);
   };
 
   const submit = (e) => {
     e.preventDefault();
     const validItems = items.filter((it) => it.productId && Number(it.qty) > 0);
-    if (!vendor.trim() || validItems.length === 0 || !paymentAccountId || !inventoryAccount) return;
+    if (validItems.length === 0 || !paymentAccountId || !inventoryAccount) return;
+    const vendorLabel = vendor.trim() || "Purchase";
     const billNo = `BILL-${String(bills.length + 1).padStart(4, "0")}`;
-    const bill = { billNo, vendor: vendor.trim(), date, items: validItems.map((it) => ({ productId: it.productId, qty: Number(it.qty), cost: Number(it.cost) || 0 })), total, status: paymentAccountId === apAccount?.id ? "unpaid" : "paid", paymentAccountId };
+    const bill = { billNo, vendor: vendorLabel, date, items: validItems.map((it) => ({ productId: it.productId, qty: Number(it.qty), cost: Number(it.cost) || 0 })), total, status: paymentAccountId === apAccount?.id ? "unpaid" : "paid", paymentAccountId };
     const journalEntry = {
-      date, memo: `Bill ${billNo} — ${vendor.trim()}`,
+      date, memo: `Bill ${billNo} — ${vendorLabel}`,
       lines: [{ accountId: inventoryAccount.id, debit: total, credit: 0 }, { accountId: paymentAccountId, debit: 0, credit: total }],
       source: "bill",
     };
@@ -1481,7 +1485,7 @@ function Bills({ accounts, products, bills, currentUser, canEdit, onAdd, onMarkP
         <Card style={{ marginBottom: 20 }}>
           <form onSubmit={submit}>
               <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 160px", gap: 10 }}>
-                <div><label style={labelStyle}>Vendor</label><input style={inputStyle} value={vendor} onChange={(e) => setVendor(e.target.value)} placeholder="Supplier name" /></div>
+                <div><label style={labelStyle}>Vendor (optional)</label><input style={inputStyle} value={vendor} onChange={(e) => setVendor(e.target.value)} placeholder="Supplier name" /></div>
                 <div><label style={labelStyle}>Date</label><input type="date" style={inputStyle} value={date} onChange={(e) => setDate(e.target.value)} /></div>
               </div>
 
@@ -1631,7 +1635,11 @@ function Invoices({ accounts, products, invoices, currentUser, canEdit, onAdd, o
       costPrice: Number(quickAddForm.costPrice) || 0, salePrice: Number(quickAddForm.salePrice) || 0,
       reorderLevel: 3, photo: "",
     });
-    updateItem(i, "productId", newProduct.id);
+    setItems((prev) => {
+      const next = [...prev];
+      next[i] = { ...next[i], productId: newProduct.id, desc: newProduct.name, rate: newProduct.salePrice || "" };
+      return next;
+    });
     setQuickAddRow(null);
   };
 
