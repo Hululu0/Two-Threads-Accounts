@@ -672,7 +672,7 @@ export default function App() {
           </div>
         )}
 
-        {tab === "dashboard" && <Dashboard accounts={accounts} balances={balances} journal={journal} products={products} />}
+        {tab === "dashboard" && <Dashboard accounts={accounts} balances={balances} journal={journal} products={products} currentUser={currentUser} />}
 
         {tab === "inventory" && (
           <Inventory
@@ -1074,7 +1074,8 @@ function Sidebar({ tab, setTab, currentUser, onLogout, mobileOpen, onCloseMobile
    Dashboard
 --------------------------------------------------------- */
 
-function Dashboard({ accounts, balances, journal, products }) {
+function Dashboard({ accounts, balances, journal, products, currentUser }) {
+  const isAdmin = currentUser.role === "admin";
   const cash = accounts.filter((a) => a.type === "asset" && a.name !== "Accounts Receivable" && a.name !== "Inventory").reduce((s, a) => s + (balances[a.id] || 0), 0);
   const receivable = accounts.filter((a) => a.name === "Accounts Receivable").reduce((s, a) => s + (balances[a.id] || 0), 0);
   const income = accounts.filter((a) => a.type === "income").reduce((s, a) => s + (balances[a.id] || 0), 0);
@@ -1094,34 +1095,38 @@ function Dashboard({ accounts, balances, journal, products }) {
   return (
     <div>
       <PageHeader title="Dashboard" subtitle="A quick overview of your business" />
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px,1fr))", gap: 14, marginBottom: 24 }}>
-        {cards.map((c) => (
-          <Card key={c.label}>
-            <div style={{ fontSize: 12, color: PALETTE.inkSoft, fontWeight: 600, marginBottom: 8 }}>{c.label}</div>
-            <div style={{ fontFamily: FONT.mono, fontSize: 20, color: c.color }}>{fmtMoney(c.value)}</div>
-          </Card>
-        ))}
-      </div>
+      {isAdmin && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px,1fr))", gap: 14, marginBottom: 24 }}>
+          {cards.map((c) => (
+            <Card key={c.label}>
+              <div style={{ fontSize: 12, color: PALETTE.inkSoft, fontWeight: 600, marginBottom: 8 }}>{c.label}</div>
+              <div style={{ fontFamily: FONT.mono, fontSize: 20, color: c.color }}>{fmtMoney(c.value)}</div>
+            </Card>
+          ))}
+        </div>
+      )}
 
-      <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: 16 }}>
-        <Card>
-          <div style={{ fontFamily: FONT.display, fontSize: 15.5, marginBottom: 12, fontWeight: 600 }}>Recent Journal Entries</div>
-          {recent.length === 0 ? <EmptyState text="No entries yet. Add an invoice, bill, or expense to see it here." /> : (
-            <div style={{ overflowX: "auto" }}><table style={{ minWidth: 560 }}>
-              <thead><tr style={{ borderBottom: `1px solid ${PALETTE.line}` }}><Th>Date</Th><Th>Memo</Th><Th align="right">Amount</Th><Th>By</Th></tr></thead>
-              <tbody>
-                {recent.map((j) => {
-                  const total = j.lines.reduce((s, l) => s + (Number(l.debit) || 0), 0);
-                  return (
-                    <tr key={j.id} className="row-hover" style={{ borderBottom: `1px solid ${PALETTE.line}` }}>
-                      <Td>{j.date}</Td><Td>{j.memo}</Td><Td align="right" mono>{fmtMoney(total)}</Td><Td>{j.createdBy}</Td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table></div>
-          )}
-        </Card>
+      <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: isAdmin ? "1.6fr 1fr" : "1fr", gap: 16 }}>
+        {isAdmin && (
+          <Card>
+            <div style={{ fontFamily: FONT.display, fontSize: 15.5, marginBottom: 12, fontWeight: 600 }}>Recent Journal Entries</div>
+            {recent.length === 0 ? <EmptyState text="No entries yet. Add an invoice, bill, or expense to see it here." /> : (
+              <div style={{ overflowX: "auto" }}><table style={{ minWidth: 560 }}>
+                <thead><tr style={{ borderBottom: `1px solid ${PALETTE.line}` }}><Th>Date</Th><Th>Memo</Th><Th align="right">Amount</Th><Th>By</Th></tr></thead>
+                <tbody>
+                  {recent.map((j) => {
+                    const total = j.lines.reduce((s, l) => s + (Number(l.debit) || 0), 0);
+                    return (
+                      <tr key={j.id} className="row-hover" style={{ borderBottom: `1px solid ${PALETTE.line}` }}>
+                        <Td>{j.date}</Td><Td>{j.memo}</Td><Td align="right" mono>{fmtMoney(total)}</Td><Td>{j.createdBy}</Td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table></div>
+            )}
+          </Card>
+        )}
 
         <Card>
           <div style={{ fontFamily: FONT.display, fontSize: 15.5, marginBottom: 12, fontWeight: 600 }}>Low Stock</div>
