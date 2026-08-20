@@ -764,7 +764,7 @@ export default function App() {
                   createdBy: currentUser.name, source: "invoice-payment", refId: newInvoice.id,
                 };
                 journalToSave = [payJe, ...journalToSave];
-                newInvoice.payments = [{ id: uid("pay"), date: depositInfo.date || todayStr(), amount: depositInfo.amount, accountId: depositInfo.accountId, method: depositInfo.method }];
+                newInvoice.payments = [{ id: uid("pay"), date: depositInfo.date || todayStr(), amount: depositInfo.amount, accountId: depositInfo.accountId, method: depositInfo.method, journalId: payJe.id }];
                 newInvoice.status = depositInfo.amount >= invoice.total ? "paid" : "partial";
               }
               await persistJournal(journalToSave);
@@ -815,11 +815,39 @@ export default function App() {
                 createdBy: currentUser.name, source: "invoice-payment", refId: invoice.id,
               };
               await persistJournal([je, ...journal]);
-              const payments = [...(invoice.payments || []), { id: uid("pay"), date: date || todayStr(), amount, accountId, method }];
+              const payments = [...(invoice.payments || []), { id: uid("pay"), date: date || todayStr(), amount, accountId, method, journalId: je.id }];
               const paidTotal = payments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
               const status = paidTotal <= 0 ? "unpaid" : paidTotal >= invoice.total ? "paid" : "partial";
               await persistInvoices(invoices.map((i) => (i.id === invoice.id ? { ...i, payments, status } : i)));
               showToast("Payment recorded");
+            }}
+            onEditPayment={async (invoice, paymentId, updated) => {
+              const oldPayment = (invoice.payments || []).find((p) => p.id === paymentId);
+              const nextJournal = oldPayment && oldPayment.journalId ? journal.filter((j) => j.id !== oldPayment.journalId) : journal;
+              const je = {
+                id: uid("je"), date: updated.date || todayStr(), memo: `Payment received — Invoice ${invoice.number} (${updated.method})`,
+                lines: [
+                  { accountId: updated.accountId, debit: updated.amount, credit: 0 },
+                  { accountId: incomeAccount ? incomeAccount.id : "", debit: 0, credit: updated.amount },
+                ],
+                createdBy: currentUser.name, source: "invoice-payment", refId: invoice.id,
+              };
+              await persistJournal([je, ...nextJournal]);
+              const payments = (invoice.payments || []).map((p) => (p.id === paymentId ? { ...p, ...updated, journalId: je.id } : p));
+              const paidTotal = payments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+              const status = paidTotal <= 0 ? "unpaid" : paidTotal >= invoice.total ? "paid" : "partial";
+              await persistInvoices(invoices.map((i) => (i.id === invoice.id ? { ...i, payments, status } : i)));
+              showToast("Payment updated");
+            }}
+            onDeletePayment={async (invoice, paymentId) => {
+              const oldPayment = (invoice.payments || []).find((p) => p.id === paymentId);
+              const nextJournal = oldPayment && oldPayment.journalId ? journal.filter((j) => j.id !== oldPayment.journalId) : journal;
+              await persistJournal(nextJournal);
+              const payments = (invoice.payments || []).filter((p) => p.id !== paymentId);
+              const paidTotal = payments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+              const status = paidTotal <= 0 ? "unpaid" : paidTotal >= invoice.total ? "paid" : "partial";
+              await persistInvoices(invoices.map((i) => (i.id === invoice.id ? { ...i, payments, status } : i)));
+              showToast("Payment removed");
             }}
             onDelete={async (invoice) => {
               const productItems = invoice.items.filter((it) => it.productId);
@@ -1582,7 +1610,7 @@ function Bills({ accounts, products, bills, currentUser, canEdit, onAdd, onMarkP
    Invoices — items can link to inventory products
 --------------------------------------------------------- */
 
-function Invoices({ accounts, products, invoices, currentUser, canEdit, onAdd, onEdit, onRecordPayment, onDelete, onBulkImport, onQuickAddProduct }) {
+function Invoices({ accounts, products, invoices, currentUser, canEdit, onAdd, onEdit, onRecordPayment, onEditPayment, onDeletePayment, onDelete, onBulkImport, onQuickAddProduct }) {
   const [open, setOpen] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState(null);
   const [customer, setCustomer] = useState("");
@@ -1600,6 +1628,12 @@ function Invoices({ accounts, products, invoices, currentUser, canEdit, onAdd, o
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState("");
   const [viewingInvoice, setViewingInvoice] = useState(null);
+
+  useEffect(() => {
+    if (!viewingInvoice) return;
+    const latest = invoices.find((i) => i.id === viewingInvoice.id);
+    if (latest && latest !== viewingInvoice) setViewingInvoice(latest);
+  }, [invoices]);
   const [payingInvoice, setPayingInvoice] = useState(null);
   const [quickAddRow, setQuickAddRow] = useState(null);
   const [quickAddForm, setQuickAddForm] = useState({ name: "", category: "", unit: "pcs", costPrice: "", salePrice: "" });
@@ -2016,9 +2050,12 @@ function Invoices({ accounts, products, invoices, currentUser, canEdit, onAdd, o
       {viewingInvoice && (
         <InvoiceDetailModal
           invoice={viewingInvoice}
+          accounts={accounts}
           onClose={() => setViewingInvoice(null)}
           onEdit={canEdit ? () => startEditInvoice(viewingInvoice) : null}
           onReceivePayment={canEdit && viewingInvoice.status !== "paid" ? () => { setPayingInvoice(viewingInvoice); setViewingInvoice(null); } : null}
+          onEditPayment={canEdit ? (paymentId, updated) => onEditPayment(viewingInvoice, paymentId, updated) : null}
+          onDeletePayment={canEdit ? (paymentId) => onDeletePayment(viewingInvoice, paymentId) : null}
         />
       )}
       {payingInvoice && (
@@ -2087,11 +2124,25 @@ function ReceivePaymentPage({ invoice, cashAccounts, onClose, onConfirm }) {
   );
 }
 
-function InvoiceDetailModal({ invoice, onClose, onEdit, onReceivePayment }) {
+function InvoiceDetailModal({ invoice, accounts, onClose, onEdit, onReceivePayment, onEditPayment, onDeletePayment }) {
+  const [editingPaymentId, setEditingPaymentId] = useState(null);
+  const [paymentForm, setPaymentForm] = useState({});
   const paidTotal = (invoice.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
   const balanceDue = invoice.total - paidTotal;
   const statusTone = invoice.status === "paid" ? "good" : invoice.status === "partial" ? "neutral" : "bad";
   const statusLabel = invoice.status === "paid" ? "Paid" : invoice.status === "partial" ? "Partial" : "Unpaid";
+  const cashAccounts = (accounts || []).filter((a) => a.type === "asset" && a.name !== "Accounts Receivable" && a.name !== "Inventory");
+
+  const startEditPayment = (p) => {
+    setEditingPaymentId(p.id);
+    setPaymentForm({ date: p.date, amount: String(p.amount), method: p.method || "Cash", accountId: p.accountId || "" });
+  };
+  const savePayment = (paymentId) => {
+    const amt = Number(paymentForm.amount);
+    if (!(amt > 0) || !paymentForm.accountId) return;
+    onEditPayment(paymentId, { date: paymentForm.date, amount: amt, method: paymentForm.method, accountId: paymentForm.accountId });
+    setEditingPaymentId(null);
+  };
 
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(20,20,20,0.45)", zIndex: 300, display: "flex", alignItems: "flex-start", justifyContent: "center", overflowY: "auto", padding: "40px 16px" }}>
@@ -2150,12 +2201,40 @@ function InvoiceDetailModal({ invoice, onClose, onEdit, onReceivePayment }) {
         {(invoice.payments || []).length > 0 && (
           <div style={{ marginBottom: 20 }}>
             <div style={{ fontSize: 11, color: PALETTE.inkSoft, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 6 }}>Payment History</div>
-            {invoice.payments.map((p) => (
-              <div key={p.id} style={{ fontSize: 12.5, color: PALETTE.inkSoft, display: "flex", justifyContent: "space-between", padding: "4px 0" }}>
-                <span>{p.date} · {p.method}</span>
-                <span style={{ fontFamily: FONT.mono }}>{fmtMoney(p.amount)}</span>
-              </div>
-            ))}
+            {invoice.payments.map((p) => {
+              const accName = (accounts || []).find((a) => a.id === p.accountId)?.name;
+              if (editingPaymentId === p.id) {
+                return (
+                  <Card key={p.id} style={{ padding: 12, marginBottom: 8, background: "rgba(255,255,255,0.04)" }}>
+                    <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                      <input style={{ ...inputStyle, padding: "6px 8px" }} type="date" value={paymentForm.date} onChange={(e) => setPaymentForm({ ...paymentForm, date: e.target.value })} />
+                      <input style={{ ...inputStyle, padding: "6px 8px" }} type="number" value={paymentForm.amount} onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })} placeholder="Amount" />
+                    </div>
+                    <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
+                      <select style={{ ...inputStyle, padding: "6px 8px" }} value={paymentForm.method} onChange={(e) => setPaymentForm({ ...paymentForm, method: e.target.value })}>{PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}</select>
+                      <select style={{ ...inputStyle, padding: "6px 8px" }} value={paymentForm.accountId} onChange={(e) => setPaymentForm({ ...paymentForm, accountId: e.target.value })}>
+                        <option value="">Account…</option>
+                        {cashAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                      <button className="pin-btn" onClick={() => savePayment(p.id)} style={{ background: PALETTE.credit, color: "#fff", fontSize: 12, padding: "6px 14px", borderRadius: 999 }}>Save</button>
+                      <button className="pin-btn" onClick={() => setEditingPaymentId(null)} style={{ background: "transparent", color: PALETTE.inkSoft, fontSize: 12 }}>Cancel</button>
+                    </div>
+                  </Card>
+                );
+              }
+              return (
+                <div key={p.id} style={{ fontSize: 12.5, color: PALETTE.inkSoft, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0" }}>
+                  <span>{p.date} · {p.method}{accName ? ` · ${accName}` : ""}</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontFamily: FONT.mono, color: PALETTE.ink }}>{fmtMoney(p.amount)}</span>
+                    {onEditPayment && <button className="pin-btn" onClick={() => startEditPayment(p)} style={{ background: "transparent", color: PALETTE.inkSoft, padding: 3 }}><Edit2 size={12} /></button>}
+                    {onDeletePayment && <button className="pin-btn" onClick={() => onDeletePayment(p.id)} style={{ background: "transparent", color: PALETTE.debit, padding: 3 }}><Trash2 size={12} /></button>}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         )}
 
