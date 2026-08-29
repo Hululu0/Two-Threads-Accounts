@@ -121,6 +121,12 @@ function generateInvoicePDF(invoice) {
   doc.setFontSize(15);
   doc.setTextColor(...ACCENT);
   doc.text(`Invoice ${invoice.number}`, pageWidth - marginX, y, { align: "right" });
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  doc.setTextColor(...INK_SOFT);
+  let metaY = y + 14;
+  if (invoice.media) { doc.text(`Media: ${invoice.media}`, pageWidth - marginX, metaY, { align: "right" }); metaY += 12; }
+  if (invoice.salesBy) { doc.text(`Sales by: ${invoice.salesBy}`, pageWidth - marginX, metaY, { align: "right" }); metaY += 12; }
 
   y += 40;
   doc.setDrawColor(...INK);
