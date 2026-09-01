@@ -959,6 +959,24 @@ export default function App() {
           />
         )}
 
+        {tab === "accounts" && currentUser.role === "admin" && (
+          <DataRecoveryPanel
+            accounts={accounts} journal={journal} invoices={invoices} expenses={expenses} bills={bills} incomeEntries={incomeEntries}
+            onRelink={async (oldId, newId) => {
+              await persistJournal(journal.map((j) => ({ ...j, lines: j.lines.map((l) => (l.accountId === oldId ? { ...l, accountId: newId } : l)) })));
+              await persistInvoices(invoices.map((i) => ({ ...i, payments: (i.payments || []).map((p) => (p.accountId === oldId ? { ...p, accountId: newId } : p)) })));
+              await persistExpenses(expenses.map((e) => (e.accountId === oldId ? { ...e, accountId: newId } : e)));
+              await persistBills(bills.map((b) => (b.paymentAccountId === oldId ? { ...b, paymentAccountId: newId } : b)));
+              await persistIncomeEntries(incomeEntries.map((e) => ({
+                ...e,
+                accountId: e.accountId === oldId ? newId : e.accountId,
+                depositAccountId: e.depositAccountId === oldId ? newId : e.depositAccountId,
+              })));
+              showToast("Relinked — balance should now be correct");
+            }}
+          />
+        )}
+
         {tab === "accounts" && (
           <ChartOfAccounts
             accounts={accounts} balances={balances} currentUser={currentUser} canEdit={canEditTab(currentUser, "accounts")}
@@ -2719,6 +2737,76 @@ function IncomeTab({ accounts, incomeEntries, currentUser, canEdit, onAdd, onEdi
 /* ---------------------------------------------------------
    Chart of Accounts
 --------------------------------------------------------- */
+
+/* ---------------------------------------------------------
+   Data Recovery — find journal/record entries pointing at an
+   account id that no longer exists in the Chart of Accounts
+   (e.g. after an accidental overwrite), and relink them to a
+   real account to restore the balance and transaction history.
+--------------------------------------------------------- */
+
+function DataRecoveryPanel({ accounts, journal, invoices, expenses, bills, incomeEntries, onRelink }) {
+  const [relinkTarget, setRelinkTarget] = useState({});
+
+  const existingIds = new Set(accounts.map((a) => a.id));
+  const usedIds = new Map(); // id -> { debit, credit, memos: Set }
+  journal.forEach((j) => {
+    j.lines.forEach((l) => {
+      if (!l.accountId || existingIds.has(l.accountId)) return;
+      if (!usedIds.has(l.accountId)) usedIds.set(l.accountId, { debit: 0, credit: 0, memos: [] });
+      const entry = usedIds.get(l.accountId);
+      entry.debit += Number(l.debit) || 0;
+      entry.credit += Number(l.credit) || 0;
+      if (entry.memos.length < 4 && j.memo && !entry.memos.includes(j.memo)) entry.memos.push(j.memo);
+    });
+  });
+
+  const orphans = [...usedIds.entries()].map(([id, v]) => ({ id, ...v, net: v.credit - v.debit }));
+
+  if (orphans.length === 0) return null;
+
+  return (
+    <Card style={{ marginBottom: 24, borderColor: PALETTE.debit }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+        <AlertCircle size={16} color={PALETTE.debit} />
+        <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600 }}>Data Recovery — {orphans.length} orphaned account{orphans.length > 1 ? "s" : ""} found</div>
+      </div>
+      <p style={{ fontSize: 12.5, color: PALETTE.inkSoft, marginTop: 4, marginBottom: 14 }}>
+        These are old transactions still in your books that point to an account that no longer exists (likely from the recent
+        data issue). Nothing is lost — pick which current account each one should belong to, and its balance and history will be restored.
+      </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {orphans.map((o) => (
+          <div key={o.id} style={{ padding: 12, border: `1px solid ${PALETTE.line}`, borderRadius: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 6 }}>
+              <div style={{ fontSize: 12.5, color: PALETTE.inkSoft, fontFamily: FONT.mono }}>ID: {o.id}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, fontFamily: FONT.mono, color: o.net >= 0 ? PALETTE.credit : PALETTE.debit }}>Net: {fmtMoney(o.net)}</div>
+            </div>
+            {o.memos.length > 0 && (
+              <div style={{ fontSize: 11.5, color: PALETTE.inkSoft, marginBottom: 8 }}>
+                Sample entries: {o.memos.join(" · ")}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <select style={{ ...inputStyle, width: "auto", minWidth: 200, padding: "6px 10px" }} value={relinkTarget[o.id] || ""} onChange={(e) => setRelinkTarget({ ...relinkTarget, [o.id]: e.target.value })}>
+                <option value="">Relink to which account?</option>
+                {accounts.map((a) => <option key={a.id} value={a.id}>{a.name} ({a.type})</option>)}
+              </select>
+              <button
+                className="pin-btn"
+                disabled={!relinkTarget[o.id]}
+                onClick={() => onRelink(o.id, relinkTarget[o.id])}
+                style={{ background: PALETTE.credit, color: "#fff", fontSize: 12.5, padding: "7px 16px", borderRadius: 999, opacity: relinkTarget[o.id] ? 1 : 0.5 }}
+              >
+                Relink & Restore
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
 
 function ChartOfAccounts({ accounts, balances, currentUser, canEdit, onAdd, onAddMany, onEdit, onDelete, onAdjustBalance, onTransfer }) {
   const [open, setOpen] = useState(false);
