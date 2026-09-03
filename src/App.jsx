@@ -978,6 +978,10 @@ export default function App() {
               })));
               showToast("Relinked \u2014 balance should now be correct");
             }}
+            onDiscard={async (oldId) => {
+              await persistJournal(journal.filter((j) => !j.lines.some((l) => l.accountId === oldId)));
+              showToast("Old entry discarded");
+            }}
           />
         )}
 
@@ -2749,7 +2753,7 @@ function IncomeTab({ accounts, incomeEntries, currentUser, canEdit, onAdd, onEdi
    real account to restore the balance and transaction history.
 --------------------------------------------------------- */
 
-function DataRecoveryPanel({ accounts, journal, invoices, expenses, bills, incomeEntries, onRelink }) {
+function DataRecoveryPanel({ accounts, journal, invoices, expenses, bills, incomeEntries, onRelink, onDiscard }) {
   const [relinkTarget, setRelinkTarget] = useState({});
 
   const existingIds = new Set(accounts.map((a) => a.id));
@@ -2777,7 +2781,8 @@ function DataRecoveryPanel({ accounts, journal, invoices, expenses, bills, incom
       </div>
       <p style={{ fontSize: 12.5, color: PALETTE.inkSoft, marginTop: 4, marginBottom: 14 }}>
         These are old transactions still in your books that point to an account that no longer exists (likely from the recent
-        data issue). Nothing is lost \u2014 pick which current account each one should belong to, and its balance and history will be restored.
+        data issue). For each one, either relink it to a current account to restore its balance and history, or discard it if
+        you don't need it anymore.
       </p>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {orphans.map((o) => (
@@ -2803,6 +2808,13 @@ function DataRecoveryPanel({ accounts, journal, invoices, expenses, bills, incom
                 style={{ background: PALETTE.credit, color: "#fff", fontSize: 12.5, padding: "7px 16px", borderRadius: 999, opacity: relinkTarget[o.id] ? 1 : 0.5 }}
               >
                 Relink & Restore
+              </button>
+              <button
+                className="pin-btn"
+                onClick={() => { if (window.confirm("Discard this old entry? This removes it from your books permanently \u2014 it can't be relinked afterwards.")) onDiscard(o.id); }}
+                style={{ background: "transparent", color: PALETTE.debit, fontSize: 12.5, padding: "7px 16px", borderRadius: 999, border: `1px solid ${PALETTE.debit}` }}
+              >
+                Discard
               </button>
             </div>
           </div>
