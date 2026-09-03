@@ -792,10 +792,12 @@ export default function App() {
                 journalToSave = [payJe, ...journalToSave];
                 newInvoice.payments = [{ id: uid("pay"), date: depositInfo.date || todayStr(), amount: depositInfo.amount, accountId: depositInfo.accountId, method: depositInfo.method, journalId: payJe.id }];
                 newInvoice.status = depositInfo.amount >= invoice.total ? "paid" : "partial";
+              } else if (depositInfo && depositInfo.amount > 0 && !incomeAccount) {
+                showToast("Invoice saved, but the deposit was NOT recorded \u2014 no Income account found. Add one in Chart of Accounts, then use Receive Payment.");
               }
               await persistJournal(journalToSave);
               await persistInvoices([newInvoice, ...invoices]);
-              showToast("Invoice created");
+              if (!(depositInfo && depositInfo.amount > 0 && !incomeAccount)) showToast("Invoice created");
             }}
             onEdit={async (invoiceId, updatedInvoice, cogsJournalEntry, oldQtyChanges, newQtyChanges) => {
               const oldInvoice = invoices.find((i) => i.id === invoiceId);
@@ -836,11 +838,12 @@ export default function App() {
               showToast("Invoice updated");
             }}
             onRecordPayment={async (invoice, amount, accountId, method, date) => {
+              if (!incomeAccount) { showToast("Can't record payment \u2014 no Income account found. Add one in Chart of Accounts first."); return; }
               const je = {
                 id: uid("je"), date: date || todayStr(), memo: `Payment received \u2014 Invoice ${invoice.number} (${method})`,
                 lines: [
                   { accountId: accountId, debit: amount, credit: 0 },
-                  { accountId: incomeAccount ? incomeAccount.id : "", debit: 0, credit: amount },
+                  { accountId: incomeAccount.id, debit: 0, credit: amount },
                 ],
                 createdBy: currentUser.name, source: "invoice-payment", refId: invoice.id,
               };
@@ -852,13 +855,14 @@ export default function App() {
               showToast("Payment recorded");
             }}
             onEditPayment={async (invoice, paymentId, updated) => {
+              if (!incomeAccount) { showToast("Can't update payment \u2014 no Income account found. Add one in Chart of Accounts first."); return; }
               const oldPayment = (invoice.payments || []).find((p) => p.id === paymentId);
               const nextJournal = oldPayment && oldPayment.journalId ? journal.filter((j) => j.id !== oldPayment.journalId) : journal;
               const je = {
                 id: uid("je"), date: updated.date || todayStr(), memo: `Payment received \u2014 Invoice ${invoice.number} (${updated.method})`,
                 lines: [
                   { accountId: updated.accountId, debit: updated.amount, credit: 0 },
-                  { accountId: incomeAccount ? incomeAccount.id : "", debit: 0, credit: updated.amount },
+                  { accountId: incomeAccount.id, debit: 0, credit: updated.amount },
                 ],
                 createdBy: currentUser.name, source: "invoice-payment", refId: invoice.id,
               };
@@ -2836,6 +2840,14 @@ function ChartOfAccounts({ accounts, balances, currentUser, canEdit, onAdd, onAd
     onAddMany(toAdd);
   };
 
+  const missingCoreAccounts = DEFAULT_ACCOUNTS.filter(
+    (d) => !accounts.some((a) => a.name.toLowerCase() === d.name.toLowerCase())
+  );
+  const restoreCoreAccounts = () => {
+    if (missingCoreAccounts.length === 0) return;
+    onAddMany(missingCoreAccounts.map((d) => ({ code: d.code, name: d.name, type: d.type })));
+  };
+
   const submit = (e) => {
     e.preventDefault();
     if (!form.code.trim() || !form.name.trim()) return;
@@ -2874,6 +2886,15 @@ function ChartOfAccounts({ accounts, balances, currentUser, canEdit, onAdd, onAd
         <PageHeader title="Chart of Accounts" subtitle="All accounts, balances, opening balances, and transfers" />
         {isAdmin && (
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {missingCoreAccounts.length > 0 && (
+              <button
+                className="pin-btn"
+                onClick={restoreCoreAccounts}
+                style={{ background: PALETTE.debit, color: "#fff", display: "flex", alignItems: "center", gap: 6, padding: "10px 16px", borderRadius: 999, fontSize: 13.5, fontWeight: 700 }}
+              >
+                <AlertCircle size={15} /> Restore {missingCoreAccounts.length} Missing Core Account{missingCoreAccounts.length > 1 ? "s" : ""}
+              </button>
+            )}
             {missingCategories.length > 0 && (
               <GhostButton onClick={addStandardCategories}>+ Add {missingCategories.length} Standard Categories</GhostButton>
             )}
