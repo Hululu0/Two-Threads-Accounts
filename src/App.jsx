@@ -78,6 +78,24 @@ function canEditTab(user, tabKey) { return hasAccess(user, tabKey, "edit"); }
 function uid(prefix = "id") {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
+// Repairs text that was corrupted by being copy-pasted through a path that
+// misread its UTF-8 bytes as Latin-1/Windows-1252 (a classic "mojibake" bug --
+// shows up as sequences like garbled multi-character blobs where a single
+// character like an em dash should be). Leaves already-correct text (including
+// Bangla, which uses code points this bug can't produce) untouched.
+function fixMojibake(str) {
+  if (!str || typeof str !== "string") return str;
+  for (let i = 0; i < str.length; i++) {
+    if (str.charCodeAt(i) > 255) return str;
+  }
+  try {
+    const bytes = new Uint8Array([...str].map((ch) => ch.charCodeAt(0)));
+    const decoded = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return decoded;
+  } catch (e) {
+    return str;
+  }
+}
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -959,6 +977,23 @@ export default function App() {
               await persistIncomeEntries(incomeEntries.filter((e) => e.id !== entry.id));
               await persistJournal(journal.filter((j) => j.id !== entry.journalId));
               showToast("Income entry deleted");
+            }}
+          />
+        )}
+
+        {tab === "accounts" && currentUser.role === "admin" && (
+          <TextRepairPanel
+            journal={journal} invoices={invoices} expenses={expenses} bills={bills} incomeEntries={incomeEntries}
+            onFixAll={async () => {
+              await persistJournal(journal.map((j) => (j.memo ? { ...j, memo: fixMojibake(j.memo) } : j)));
+              await persistInvoices(invoices.map((i) => ({
+                ...i,
+                note: fixMojibake(i.note), customer: fixMojibake(i.customer), address: fixMojibake(i.address), salesBy: fixMojibake(i.salesBy),
+              })));
+              await persistExpenses(expenses.map((e) => (e.vendor ? { ...e, vendor: fixMojibake(e.vendor) } : e)));
+              await persistBills(bills.map((b) => (b.vendor ? { ...b, vendor: fixMojibake(b.vendor) } : b)));
+              await persistIncomeEntries(incomeEntries.map((e) => ({ ...e, source: fixMojibake(e.source), note: fixMojibake(e.note) })));
+              showToast("Text repaired");
             }}
           />
         )}
@@ -2752,6 +2787,57 @@ function IncomeTab({ accounts, incomeEntries, currentUser, canEdit, onAdd, onEdi
    (e.g. after an accidental overwrite), and relink them to a
    real account to restore the balance and transaction history.
 --------------------------------------------------------- */
+
+/* ---------------------------------------------------------
+   Text Repair -- fix already-saved memo/note/vendor text that
+   got garbled by a copy-paste encoding bug (now prevented for
+   new entries, but old saved records need a one-time repair).
+--------------------------------------------------------- */
+
+function TextRepairPanel({ journal, invoices, expenses, bills, incomeEntries, onFixAll }) {
+  const findings = [];
+  journal.forEach((j) => { if (j.memo && fixMojibake(j.memo) !== j.memo) findings.push({ before: j.memo, after: fixMojibake(j.memo) }); });
+  invoices.forEach((i) => {
+    ["note", "customer", "address", "salesBy"].forEach((f) => { if (i[f] && fixMojibake(i[f]) !== i[f]) findings.push({ before: i[f], after: fixMojibake(i[f]) }); });
+  });
+  expenses.forEach((e) => { if (e.vendor && fixMojibake(e.vendor) !== e.vendor) findings.push({ before: e.vendor, after: fixMojibake(e.vendor) }); });
+  bills.forEach((b) => { if (b.vendor && fixMojibake(b.vendor) !== b.vendor) findings.push({ before: b.vendor, after: fixMojibake(b.vendor) }); });
+  incomeEntries.forEach((e) => {
+    ["source", "note"].forEach((f) => { if (e[f] && fixMojibake(e[f]) !== e[f]) findings.push({ before: e[f], after: fixMojibake(e[f]) }); });
+  });
+
+  if (findings.length === 0) return null;
+  const samples = findings.slice(0, 4);
+
+  return (
+    <Card style={{ marginBottom: 24, borderColor: PALETTE.debit }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+        <AlertCircle size={16} color={PALETTE.debit} />
+        <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600 }}>Garbled Text Found \u2014 {findings.length} entr{findings.length > 1 ? "ies" : "y"}</div>
+      </div>
+      <p style={{ fontSize: 12.5, color: PALETTE.inkSoft, marginTop: 4, marginBottom: 12 }}>
+        Some old memos/notes got corrupted by a text-encoding bug (now fixed for new entries). This will repair the saved text \u2014 nothing else changes.
+      </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
+        {samples.map((s, i) => (
+          <div key={i} style={{ fontSize: 12, fontFamily: FONT.mono }}>
+            <span style={{ color: PALETTE.debit }}>{s.before}</span>
+            <span style={{ color: PALETTE.inkSoft }}> {"\u2192"} </span>
+            <span style={{ color: PALETTE.credit }}>{s.after}</span>
+          </div>
+        ))}
+        {findings.length > samples.length && <div style={{ fontSize: 12, color: PALETTE.inkSoft }}>...and {findings.length - samples.length} more</div>}
+      </div>
+      <button
+        className="pin-btn"
+        onClick={onFixAll}
+        style={{ background: PALETTE.credit, color: "#fff", fontSize: 12.5, padding: "8px 18px", borderRadius: 999, fontWeight: 700 }}
+      >
+        Fix All {findings.length} Entries
+      </button>
+    </Card>
+  );
+}
 
 function DataRecoveryPanel({ accounts, journal, invoices, expenses, bills, incomeEntries, onRelink, onDiscard }) {
   const [relinkTarget, setRelinkTarget] = useState({});
