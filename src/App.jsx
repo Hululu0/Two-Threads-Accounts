@@ -32,7 +32,7 @@ const DEFAULT_ACCOUNTS = [
   { id: "acc-5990", code: "5990", name: "Cost of Goods Sold", type: "expense" },
 ];
 
-// The business's real expense categories — used to seed Chart of Accounts via the
+// The business's real expense categories \u2014 used to seed Chart of Accounts via the
 // "Add Standard Categories" quick-setup button, and for brand-new installs.
 const STANDARD_EXPENSE_CATEGORIES = [
   "Transportation", "Printing & Accessories", "Iffat Remuneration", "Raisa Remuneration",
@@ -220,7 +220,7 @@ function generateInvoicePDF(invoice) {
   doc.setTextColor(...INK_SOFT);
   const noteText = invoice.note && invoice.note.trim()
     ? invoice.note.trim()
-    : "Thank you for shopping with Two Threads. Please check your items on delivery — if anything is missing or damaged, contact us right away so we can help.";
+    : "Thank you for shopping with Two Threads. Please check your items on delivery \u2014 if anything is missing or damaged, contact us right away so we can help.";
   const noteLines = doc.splitTextToSize(noteText, 260);
   doc.text(noteLines, marginX, y);
 
@@ -273,7 +273,7 @@ function generateInvoicePDF(invoice) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8.5);
     invoice.payments.forEach((p) => {
-      doc.text(`${p.date} — ${fmtMoney(p.amount)} (${p.method || "Payment"})`, marginX, y);
+      doc.text(`${p.date} \u2014 ${fmtMoney(p.amount)} (${p.method || "Payment"})`, marginX, y);
       y += 12;
     });
     y += 10;
@@ -339,7 +339,7 @@ const KEYS = {
 const SESSION_KEY = "two-threads-session-user-id";
 
 /* ---------------------------------------------------------
-   Design tokens — deep wine/maroon gradient, glass cards
+   Design tokens \u2014 deep wine/maroon gradient, glass cards
 --------------------------------------------------------- */
 
 const PALETTE = {
@@ -641,7 +641,7 @@ export default function App() {
       <div style={styles.bootScreen}>
         <GlobalStyles />
         <Loader2 size={28} style={{ animation: "spin 1s linear infinite" }} />
-        <p style={{ marginTop: 12, fontFamily: FONT.body, color: PALETTE.ink }}>Loading…</p>
+        <p style={{ marginTop: 12, fontFamily: FONT.body, color: PALETTE.ink }}>Loading\u2026</p>
         <style>{`@keyframes spin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }`}</style>
       </div>
     );
@@ -741,7 +741,7 @@ export default function App() {
             }}
             onMarkPaid={async (bill, paymentAccountId) => {
               const je = {
-                id: uid("je"), date: todayStr(), memo: `Payment for Bill ${bill.billNo} — ${bill.vendor}`,
+                id: uid("je"), date: todayStr(), memo: `Payment for Bill ${bill.billNo} \u2014 ${bill.vendor}`,
                 lines: [
                   { accountId: apAccount.id, debit: bill.total, credit: 0 },
                   { accountId: paymentAccountId, debit: 0, credit: bill.total },
@@ -785,7 +785,7 @@ export default function App() {
               }
               if (depositInfo && depositInfo.amount > 0 && depositInfo.accountId && incomeAccount) {
                 const payJe = {
-                  id: uid("je"), date: depositInfo.date || todayStr(), memo: `Deposit received — Invoice ${invoice.number} (${depositInfo.method})`,
+                  id: uid("je"), date: depositInfo.date || todayStr(), memo: `Deposit received \u2014 Invoice ${invoice.number} (${depositInfo.method})`,
                   lines: [{ accountId: depositInfo.accountId, debit: depositInfo.amount, credit: 0 }, { accountId: incomeAccount.id, debit: 0, credit: depositInfo.amount }],
                   createdBy: currentUser.name, source: "invoice-payment", refId: newInvoice.id,
                 };
@@ -837,7 +837,7 @@ export default function App() {
             }}
             onRecordPayment={async (invoice, amount, accountId, method, date) => {
               const je = {
-                id: uid("je"), date: date || todayStr(), memo: `Payment received — Invoice ${invoice.number} (${method})`,
+                id: uid("je"), date: date || todayStr(), memo: `Payment received \u2014 Invoice ${invoice.number} (${method})`,
                 lines: [
                   { accountId: accountId, debit: amount, credit: 0 },
                   { accountId: incomeAccount ? incomeAccount.id : "", debit: 0, credit: amount },
@@ -855,7 +855,7 @@ export default function App() {
               const oldPayment = (invoice.payments || []).find((p) => p.id === paymentId);
               const nextJournal = oldPayment && oldPayment.journalId ? journal.filter((j) => j.id !== oldPayment.journalId) : journal;
               const je = {
-                id: uid("je"), date: updated.date || todayStr(), memo: `Payment received — Invoice ${invoice.number} (${updated.method})`,
+                id: uid("je"), date: updated.date || todayStr(), memo: `Payment received \u2014 Invoice ${invoice.number} (${updated.method})`,
                 lines: [
                   { accountId: updated.accountId, debit: updated.amount, credit: 0 },
                   { accountId: incomeAccount ? incomeAccount.id : "", debit: 0, credit: updated.amount },
@@ -959,6 +959,24 @@ export default function App() {
           />
         )}
 
+        {tab === "accounts" && currentUser.role === "admin" && (
+          <DataRecoveryPanel
+            accounts={accounts} journal={journal} invoices={invoices} expenses={expenses} bills={bills} incomeEntries={incomeEntries}
+            onRelink={async (oldId, newId) => {
+              await persistJournal(journal.map((j) => ({ ...j, lines: j.lines.map((l) => (l.accountId === oldId ? { ...l, accountId: newId } : l)) })));
+              await persistInvoices(invoices.map((i) => ({ ...i, payments: (i.payments || []).map((p) => (p.accountId === oldId ? { ...p, accountId: newId } : p)) })));
+              await persistExpenses(expenses.map((e) => (e.accountId === oldId ? { ...e, accountId: newId } : e)));
+              await persistBills(bills.map((b) => (b.paymentAccountId === oldId ? { ...b, paymentAccountId: newId } : b)));
+              await persistIncomeEntries(incomeEntries.map((e) => ({
+                ...e,
+                accountId: e.accountId === oldId ? newId : e.accountId,
+                depositAccountId: e.depositAccountId === oldId ? newId : e.depositAccountId,
+              })));
+              showToast("Relinked \u2014 balance should now be correct");
+            }}
+          />
+        )}
+
         {tab === "accounts" && (
           <ChartOfAccounts
             accounts={accounts} balances={balances} currentUser={currentUser} canEdit={canEditTab(currentUser, "accounts")}
@@ -981,7 +999,7 @@ export default function App() {
                   ? [{ accountId: equityAccount.id, debit: delta, credit: 0 }, { accountId: account.id, debit: 0, credit: delta }]
                   : [{ accountId: account.id, debit: -delta, credit: 0 }, { accountId: equityAccount.id, debit: 0, credit: -delta }]);
               const je = {
-                id: uid("je"), date: date || todayStr(), memo: note || `Balance adjustment — ${account.name}`,
+                id: uid("je"), date: date || todayStr(), memo: note || `Balance adjustment \u2014 ${account.name}`,
                 lines, createdBy: currentUser.name, source: "balance-adjustment",
               };
               await persistJournal([je, ...journal]);
@@ -1062,7 +1080,7 @@ function LoginScreen({ users, onCreateFirstAdmin, onLogin }) {
           </div>
         </div>
         <p style={{ color: PALETTE.inkSoft, fontSize: 13, marginTop: 12, marginBottom: 22 }}>
-          {isFirstRun ? "First time here — create your Admin account" : "Sign in with your name and PIN"}
+          {isFirstRun ? "First time here \u2014 create your Admin account" : "Sign in with your name and PIN"}
         </p>
         <label style={labelStyle}>Name</label>
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Rahim" style={inputStyle} />
@@ -1072,7 +1090,7 @@ function LoginScreen({ users, onCreateFirstAdmin, onLogin }) {
         <PrimaryButton type="submit" style={{ width: "100%", marginTop: 20, justifyContent: "center", padding: "12px 0" }}>
           {isFirstRun ? "Create Admin Account" : "Sign In"}
         </PrimaryButton>
-        {!isFirstRun && <p style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 16, lineHeight: 1.5 }}>To add a new user, ask your Admin — new team members can be added from the "Users" tab after logging in.</p>}
+        {!isFirstRun && <p style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 16, lineHeight: 1.5 }}>To add a new user, ask your Admin \u2014 new team members can be added from the "Users" tab after logging in.</p>}
       </form>
     </div>
   );
@@ -1140,7 +1158,7 @@ function Dashboard({ accounts, balances, journal, products, currentUser }) {
   const cash = accounts.filter((a) => a.type === "asset" && a.name !== "Accounts Receivable" && a.name !== "Inventory").reduce((s, a) => s + (balances[a.id] || 0), 0);
   const receivable = accounts.filter((a) => a.name === "Accounts Receivable").reduce((s, a) => s + (balances[a.id] || 0), 0);
   const income = accounts.filter((a) => a.type === "income").reduce((s, a) => s + (balances[a.id] || 0), 0);
-  const expenseTotal = accounts.filter((a) => a.type === "expense").reduce((s, a) => s + (balances[a.id] || 0), 0);
+  const expenseTotal = accounts.filter((a) => a.type === "expense" && a.name !== "Cost of Goods Sold").reduce((s, a) => s + (balances[a.id] || 0), 0);
   const inventoryValue = products.reduce((s, p) => s + (Number(p.qty) || 0) * (Number(p.costPrice) || 0), 0);
   const recent = journal.slice(0, 6);
   const lowStock = products.filter((p) => (Number(p.qty) || 0) <= (Number(p.reorderLevel) || 3));
@@ -1211,7 +1229,7 @@ function Dashboard({ accounts, balances, journal, products, currentUser }) {
 }
 
 /* ---------------------------------------------------------
-   Inventory — Pinterest-style product grid
+   Inventory \u2014 Pinterest-style product grid
 --------------------------------------------------------- */
 
 function Inventory({ products, currentUser, canEdit, onAdd, onEdit, onDelete, onImport }) {
@@ -1355,7 +1373,7 @@ function Inventory({ products, currentUser, canEdit, onAdd, onEdit, onDelete, on
               padding: "10px 16px", borderRadius: 999, fontSize: 13.5, fontWeight: 600, border: `1px solid ${PALETTE.line}`, cursor: "pointer",
             }}>
               {importing ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : <FileText size={15} />}
-              {importing ? "Importing…" : "Import from Excel"}
+              {importing ? "Importing\u2026" : "Import from Excel"}
               <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} style={{ display: "none" }} />
             </label>
             <PrimaryButton onClick={() => (open ? cancelProductForm() : setOpen(true))}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Product"}</PrimaryButton>
@@ -1384,7 +1402,7 @@ function Inventory({ products, currentUser, canEdit, onAdd, onEdit, onDelete, on
                   display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.08)", color: PALETTE.ink,
                   padding: "8px 14px", borderRadius: 999, fontSize: 12.5, fontWeight: 600, border: `1px solid ${PALETTE.line}`, cursor: "pointer",
                 }}>
-                  {photoBusy ? "Processing…" : form.photo ? "Change Photo" : "Add Photo (optional)"}
+                  {photoBusy ? "Processing\u2026" : form.photo ? "Change Photo" : "Add Photo (optional)"}
                   <input type="file" accept="image/*" onChange={handlePhoto} style={{ display: "none" }} />
                 </label>
                 {form.photo && <GhostButton onClick={() => setForm({ ...form, photo: "" })} style={{ marginLeft: 8 }}>Remove</GhostButton>}
@@ -1412,13 +1430,13 @@ function Inventory({ products, currentUser, canEdit, onAdd, onEdit, onDelete, on
             style={{ ...inputStyle, paddingLeft: 38 }}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search products by name or SKU…"
+            placeholder="Search products by name or SKU\u2026"
           />
         </div>
       </Card>
 
       {filteredProducts.length === 0 ? (
-        <Card><EmptyState text={products.length === 0 ? "No products yet — add your first product to start tracking stock." : "No products match your search."} /></Card>
+        <Card><EmptyState text={products.length === 0 ? "No products yet \u2014 add your first product to start tracking stock." : "No products match your search."} /></Card>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
           {filteredProducts.map((p) => {
@@ -1437,7 +1455,7 @@ function Inventory({ products, currentUser, canEdit, onAdd, onEdit, onDelete, on
                 )}
                 <div style={{ padding: 16 }}>
                   <div style={{ fontWeight: 600, fontSize: 14.5, marginBottom: 2 }}>{p.name}</div>
-                  <div style={{ fontSize: 11.5, color: PALETTE.inkSoft, marginBottom: 10 }}>{p.sku || "No SKU"}{p.category ? ` · ${p.category}` : ""}</div>
+                  <div style={{ fontSize: 11.5, color: PALETTE.inkSoft, marginBottom: 10 }}>{p.sku || "No SKU"}{p.category ? ` \u00B7 ${p.category}` : ""}</div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                     <Badge tone={out ? "bad" : low ? "neutral" : "good"}>{p.qty} {p.unit} in stock</Badge>
                     {isAdmin && (
@@ -1462,7 +1480,7 @@ function Inventory({ products, currentUser, canEdit, onAdd, onEdit, onDelete, on
 }
 
 /* ---------------------------------------------------------
-   Bills — purchases that add stock (QuickBooks-style)
+   Bills \u2014 purchases that add stock (QuickBooks-style)
 --------------------------------------------------------- */
 
 function Bills({ accounts, products, bills, currentUser, canEdit, onAdd, onMarkPaid, onDelete, onQuickAddProduct }) {
@@ -1520,7 +1538,7 @@ function Bills({ accounts, products, bills, currentUser, canEdit, onAdd, onMarkP
     const billNo = `BILL-${String(bills.length + 1).padStart(4, "0")}`;
     const bill = { billNo, vendor: vendorLabel, date, items: validItems.map((it) => ({ productId: it.productId, qty: Number(it.qty), cost: Number(it.cost) || 0 })), total, status: paymentAccountId === apAccount?.id ? "unpaid" : "paid", paymentAccountId };
     const journalEntry = {
-      date, memo: `Bill ${billNo} — ${vendorLabel}`,
+      date, memo: `Bill ${billNo} \u2014 ${vendorLabel}`,
       lines: [{ accountId: inventoryAccount.id, debit: total, credit: 0 }, { accountId: paymentAccountId, debit: 0, credit: total }],
       source: "bill",
     };
@@ -1532,7 +1550,7 @@ function Bills({ accounts, products, bills, currentUser, canEdit, onAdd, onMarkP
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
-        <PageHeader title="Bills" subtitle="Record a purchase — stock is added to inventory automatically" />
+        <PageHeader title="Bills" subtitle="Record a purchase \u2014 stock is added to inventory automatically" />
         {canEdit && <PrimaryButton onClick={() => setOpen((v) => !v)}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Bill"}</PrimaryButton>}
       </div>
 
@@ -1546,7 +1564,7 @@ function Bills({ accounts, products, bills, currentUser, canEdit, onAdd, onMarkP
 
               <div style={{ marginTop: 14 }}>
                 <label style={labelStyle}>Items Purchased</label>
-                {products.length === 0 && <p style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 0 }}>No products yet — use "+ Add New Product" below to create one on the spot.</p>}
+                {products.length === 0 && <p style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 0 }}>No products yet \u2014 use "+ Add New Product" below to create one on the spot.</p>}
                 {items.map((it, i) => (
                   <div key={i} style={{ marginBottom: 8 }}>
                     <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 90px 120px 30px", gap: 8 }}>
@@ -1611,7 +1629,7 @@ function Bills({ accounts, products, bills, currentUser, canEdit, onAdd, onMarkP
                         payFor === b.id ? (
                           <>
                             <select style={{ ...inputStyle, padding: "4px 6px", fontSize: 12, width: "auto" }} value={payAccount} onChange={(e) => setPayAccount(e.target.value)}>
-                              <option value="">Pay from…</option>
+                              <option value="">Pay from\u2026</option>
                               {cashAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                             </select>
                             <button className="pin-btn" disabled={!payAccount} onClick={() => { onMarkPaid(b, payAccount); setPayFor(null); setPayAccount(""); }} style={{ background: PALETTE.credit, color: "#fff", fontSize: 12, padding: "5px 10px", borderRadius: 999, opacity: payAccount ? 1 : 0.5 }}>Confirm</button>
@@ -1634,7 +1652,7 @@ function Bills({ accounts, products, bills, currentUser, canEdit, onAdd, onMarkP
 }
 
 /* ---------------------------------------------------------
-   Invoices — items can link to inventory products
+   Invoices \u2014 items can link to inventory products
 --------------------------------------------------------- */
 
 function Invoices({ accounts, products, invoices, currentUser, canEdit, onAdd, onEdit, onRecordPayment, onEditPayment, onDeletePayment, onDelete, onBulkImport, onQuickAddProduct }) {
@@ -1755,7 +1773,7 @@ function Invoices({ accounts, products, invoices, currentUser, canEdit, onAdd, o
     if (editingInvoice) {
       const { lines, qtyChanges: newQtyChanges } = buildCogs(cleanItems);
       const oldQtyChanges = (editingInvoice.items || []).filter((it) => it.productId).map((it) => ({ productId: it.productId, qty: Number(it.qty) || 0 }));
-      const cogsJournalEntry = lines.length > 0 ? { date, memo: `COGS — Invoice ${editingInvoice.number}`, lines, source: "invoice-cogs" } : null;
+      const cogsJournalEntry = lines.length > 0 ? { date, memo: `COGS \u2014 Invoice ${editingInvoice.number}`, lines, source: "invoice-cogs" } : null;
       const updatedInvoice = {
         customer: customer.trim(), phone: phone.trim(), address: address.trim(), salesBy: salesBy.trim(), media,
         date, dueDate, items: cleanItems, subtotal, discount: discountAmt, total, note: note.trim(),
@@ -1771,7 +1789,7 @@ function Invoices({ accounts, products, invoices, currentUser, canEdit, onAdd, o
       date, dueDate, items: cleanItems, subtotal, discount: discountAmt, total, note: note.trim(), payments: [], status: "unpaid",
     };
     const { lines, qtyChanges } = buildCogs(cleanItems);
-    const cogsJournalEntry = lines.length > 0 ? { date, memo: `COGS — Invoice ${number}`, lines, source: "invoice-cogs" } : null;
+    const cogsJournalEntry = lines.length > 0 ? { date, memo: `COGS \u2014 Invoice ${number}`, lines, source: "invoice-cogs" } : null;
 
     const depositAmt = Number(deposit) || 0;
     onAdd(invoice, cogsJournalEntry, qtyChanges, depositAmt > 0 ? { amount: depositAmt, accountId: depositAccount, method: depositMethod, date } : null);
@@ -1852,7 +1870,7 @@ function Invoices({ accounts, products, invoices, currentUser, canEdit, onAdd, o
           payments.forEach((p) => {
             if (!p.accountId || !incomeAccount) return;
             newJournalEntries.push({
-              id: uid("je"), date: p.date, memo: `Payment received — Invoice ${number} (imported)`,
+              id: uid("je"), date: p.date, memo: `Payment received \u2014 Invoice ${number} (imported)`,
               lines: [{ accountId: p.accountId, debit: p.amount, credit: 0 }, { accountId: incomeAccount.id, debit: 0, credit: p.amount }],
               createdBy: currentUser.name, source: "invoice-payment", refId: invoice.id,
             });
@@ -1865,7 +1883,7 @@ function Invoices({ accounts, products, invoices, currentUser, canEdit, onAdd, o
           setImportMsg('No sales rows found. Make sure the sheet has "Customer Name", "Qty", "Unit Price"/"Price" columns.');
         } else {
           const ok = window.confirm(
-            `${newInvoices.length} past sales found. Only amounts actually received (advance/payment) will be added to income — unpaid balances stay on record but won't affect your books. Inventory stock will NOT be changed. Continue?`
+            `${newInvoices.length} past sales found. Only amounts actually received (advance/payment) will be added to income \u2014 unpaid balances stay on record but won't affect your books. Inventory stock will NOT be changed. Continue?`
           );
           if (ok) onBulkImport({ newInvoices, newJournalEntries });
         }
@@ -1882,7 +1900,7 @@ function Invoices({ accounts, products, invoices, currentUser, canEdit, onAdd, o
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
-        <PageHeader title="Invoices" subtitle="Create a new invoice — inventory and journal entries update automatically" />
+        <PageHeader title="Invoices" subtitle="Create a new invoice \u2014 inventory and journal entries update automatically" />
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {canEdit && (
             <label className="pin-btn" style={{
@@ -1890,7 +1908,7 @@ function Invoices({ accounts, products, invoices, currentUser, canEdit, onAdd, o
               padding: "10px 16px", borderRadius: 999, fontSize: 13.5, fontWeight: 600, border: `1px solid ${PALETTE.line}`, cursor: "pointer",
             }}>
               {importing ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : <FileText size={15} />}
-              {importing ? "Importing…" : "Import Past Sales"}
+              {importing ? "Importing\u2026" : "Import Past Sales"}
               <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} style={{ display: "none" }} />
             </label>
           )}
@@ -1909,7 +1927,7 @@ function Invoices({ accounts, products, invoices, currentUser, canEdit, onAdd, o
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
             <div>
               <div style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 600 }}>{editingInvoice ? `Editing ${editingInvoice.number}` : "New Invoice"}</div>
-              <div style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 2 }}>Customer & Invoice Info — fill details, add items below</div>
+              <div style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 2 }}>Customer & Invoice Info \u2014 fill details, add items below</div>
             </div>
             {editingInvoice && (
               <div style={{ textAlign: "right" }}>
@@ -1918,7 +1936,7 @@ function Invoices({ accounts, products, invoices, currentUser, canEdit, onAdd, o
                   {fmtMoney(Math.max(editingInvoice.total - (editingInvoice.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0), 0))}
                 </div>
                 {editingInvoice.status !== "paid" && (
-                  <GhostButton onClick={() => { setPayingInvoice(editingInvoice); cancelForm(); }} style={{ marginTop: 2 }}>Receive Payment →</GhostButton>
+                  <GhostButton onClick={() => { setPayingInvoice(editingInvoice); cancelForm(); }} style={{ marginTop: 2 }}>Receive Payment {"\u2192"}</GhostButton>
                 )}
               </div>
             )}
@@ -1963,7 +1981,7 @@ function Invoices({ accounts, products, invoices, currentUser, canEdit, onAdd, o
                       {items.length > 1 && <button type="button" className="pin-btn" onClick={() => setItems(items.filter((_, idx) => idx !== i))} style={{ background: "transparent", color: PALETTE.debit }}><Trash2 size={14} /></button>}
                     </div>
                     {p && <div style={{ fontSize: 11, color: short ? PALETTE.debit : PALETTE.inkSoft, marginTop: 4 }}>
-                      {p.qty} {p.unit} in stock{short ? " — not enough stock, this will oversell" : ""}
+                      {p.qty} {p.unit} in stock{short ? " \u2014 not enough stock, this will oversell" : ""}
                     </div>}
                     {quickAddRow === i && (
                       <Card style={{ marginTop: 8, padding: 14, background: "rgba(255,255,255,0.04)" }}>
@@ -1974,7 +1992,7 @@ function Invoices({ accounts, products, invoices, currentUser, canEdit, onAdd, o
                           <input style={{ ...inputStyle, padding: "7px 10px" }} type="number" placeholder="Cost price" value={quickAddForm.costPrice} onChange={(e) => setQuickAddForm({ ...quickAddForm, costPrice: e.target.value })} />
                           <input style={{ ...inputStyle, padding: "7px 10px" }} type="number" placeholder="Sale price" value={quickAddForm.salePrice} onChange={(e) => setQuickAddForm({ ...quickAddForm, salePrice: e.target.value })} />
                         </div>
-                        <p style={{ fontSize: 11, color: PALETTE.inkSoft, margin: "8px 0 0" }}>This creates the product with 0 stock — selling it here will take that stock negative until you record a Bill to stock it in.</p>
+                        <p style={{ fontSize: 11, color: PALETTE.inkSoft, margin: "8px 0 0" }}>This creates the product with 0 stock \u2014 selling it here will take that stock negative until you record a Bill to stock it in.</p>
                         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                           <button type="button" className="pin-btn" onClick={() => confirmQuickAdd(i)} style={{ background: PALETTE.credit, color: "#fff", fontSize: 12, padding: "6px 14px", borderRadius: 999 }}>Create & Use</button>
                           <button type="button" className="pin-btn" onClick={() => setQuickAddRow(null)} style={{ background: "transparent", color: PALETTE.inkSoft, fontSize: 12 }}>Cancel</button>
@@ -1995,7 +2013,7 @@ function Invoices({ accounts, products, invoices, currentUser, canEdit, onAdd, o
                 style={{ ...inputStyle, minHeight: 64, resize: "vertical", fontFamily: FONT.body }}
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                placeholder="e.g. delivery instructions, thank-you message — shown on the invoice and PDF"
+                placeholder="e.g. delivery instructions, thank-you message \u2014 shown on the invoice and PDF"
               />
             </div>
 
@@ -2023,7 +2041,7 @@ function Invoices({ accounts, products, invoices, currentUser, canEdit, onAdd, o
                     {Number(deposit) > 0 && (
                       <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
                         <select style={{ ...inputStyle, padding: "6px 8px", fontSize: 12.5 }} value={depositMethod} onChange={(e) => setDepositMethod(e.target.value)}>{PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}</select>
-                        <select style={{ ...inputStyle, padding: "6px 8px", fontSize: 12.5 }} value={depositAccount} onChange={(e) => setDepositAccount(e.target.value)}><option value="">Deposit to…</option>{cashAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
+                        <select style={{ ...inputStyle, padding: "6px 8px", fontSize: 12.5 }} value={depositAccount} onChange={(e) => setDepositAccount(e.target.value)}><option value="">Deposit to\u2026</option>{cashAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
                       </div>
                     )}
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${PALETTE.line}`, paddingTop: 8 }}>
@@ -2060,10 +2078,10 @@ function Invoices({ accounts, products, invoices, currentUser, canEdit, onAdd, o
                       </button>
                     </Td>
                     <Td>{inv.customer}{inv.salesBy ? <div style={{ fontSize: 11, color: PALETTE.inkSoft }}>by {inv.salesBy}</div> : null}</Td>
-                    <Td style={{ fontSize: 12.5, color: PALETTE.inkSoft }}>{inv.phone || "—"}</Td>
+                    <Td style={{ fontSize: 12.5, color: PALETTE.inkSoft }}>{inv.phone || "\u2014"}</Td>
                     <Td>{inv.date}</Td>
                     <Td align="right" mono>{fmtMoney(inv.total)}</Td>
-                    <Td align="right" mono>{balanceDue > 0 ? fmtMoney(balanceDue) : "—"}</Td>
+                    <Td align="right" mono>{balanceDue > 0 ? fmtMoney(balanceDue) : "\u2014"}</Td>
                     <Td><Badge tone={statusTone}>{statusLabel}</Badge></Td>
                     <Td>
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -2138,7 +2156,7 @@ function ReceivePaymentPage({ invoice, cashAccounts, onClose, onConfirm }) {
           <div style={{ fontFamily: FONT.display, fontSize: 19, fontWeight: 600 }}>Receive Payment</div>
           <button className="pin-btn" onClick={onClose} style={{ background: PALETTE.chip, padding: 8, borderRadius: 999 }}><X size={16} /></button>
         </div>
-        <p style={{ fontSize: 13, color: PALETTE.inkSoft, marginTop: 0, marginBottom: 20 }}>{invoice.number} — {invoice.customer}</p>
+        <p style={{ fontSize: 13, color: PALETTE.inkSoft, marginTop: 0, marginBottom: 20 }}>{invoice.number} \u2014 {invoice.customer}</p>
 
         <Card style={{ marginBottom: 18, padding: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: PALETTE.inkSoft, marginBottom: 4 }}><span>Total</span><span style={{ fontFamily: FONT.mono, color: PALETTE.ink }}>{fmtMoney(invoice.total)}</span></div>
@@ -2200,7 +2218,7 @@ function InvoiceDetailModal({ invoice, accounts, onClose, onEdit, onReceivePayme
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
           <div>
             <div style={{ fontFamily: FONT.display, fontSize: 20, fontWeight: 600 }}>{invoice.number}</div>
-            <div style={{ fontSize: 12.5, color: PALETTE.inkSoft, marginTop: 2 }}>{invoice.date}{invoice.dueDate && invoice.dueDate !== invoice.date ? ` · Due ${invoice.dueDate}` : ""}</div>
+            <div style={{ fontSize: 12.5, color: PALETTE.inkSoft, marginTop: 2 }}>{invoice.date}{invoice.dueDate && invoice.dueDate !== invoice.date ? ` \u00B7 Due ${invoice.dueDate}` : ""}</div>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             {onEdit && <button className="pin-btn" onClick={onEdit} style={{ background: PALETTE.chip, padding: 8, borderRadius: 999 }}><Edit2 size={16} /></button>}
@@ -2270,7 +2288,7 @@ function InvoiceDetailModal({ invoice, accounts, onClose, onEdit, onReceivePayme
                     <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
                       <select style={{ ...inputStyle, padding: "6px 8px" }} value={paymentForm.method} onChange={(e) => setPaymentForm({ ...paymentForm, method: e.target.value })}>{PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}</select>
                       <select style={{ ...inputStyle, padding: "6px 8px" }} value={paymentForm.accountId} onChange={(e) => setPaymentForm({ ...paymentForm, accountId: e.target.value })}>
-                        <option value="">Account…</option>
+                        <option value="">Account\u2026</option>
                         {cashAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                       </select>
                     </div>
@@ -2283,7 +2301,7 @@ function InvoiceDetailModal({ invoice, accounts, onClose, onEdit, onReceivePayme
               }
               return (
                 <div key={p.id} style={{ fontSize: 12.5, color: PALETTE.inkSoft, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0" }}>
-                  <span>{p.date} · {p.method}{accName ? ` · ${accName}` : ""}</span>
+                  <span>{p.date} {"\u00B7"} {p.method}{accName ? ` \u00B7 ${accName}` : ""}</span>
                   <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ fontFamily: FONT.mono, color: PALETTE.ink }}>{fmtMoney(p.amount)}</span>
                     {onEditPayment && <button className="pin-btn" onClick={() => startEditPayment(p)} style={{ background: "transparent", color: PALETTE.inkSoft, padding: 3 }}><Edit2 size={12} /></button>}
@@ -2342,7 +2360,7 @@ function Expenses({ accounts, expenses, currentUser, canEdit, onAdd, onEdit, onD
     const categoryName = expenseAccounts.find((a) => a.id === accountId)?.name || "Expense";
     const vendorLabel = vendor.trim() || categoryName;
     const expense = { date, vendor: vendorLabel, accountId, paymentAccountId, amount: amt, note: note.trim() };
-    const journalEntry = { date, memo: `Expense — ${vendorLabel}`, lines: [{ accountId, debit: amt, credit: 0 }, { accountId: paymentAccountId, debit: 0, credit: amt }], source: "expense" };
+    const journalEntry = { date, memo: `Expense \u2014 ${vendorLabel}`, lines: [{ accountId, debit: amt, credit: 0 }, { accountId: paymentAccountId, debit: 0, credit: amt }], source: "expense" };
     onAdd(expense, journalEntry);
     setVendor(""); setAmount(""); setNote(""); setOpen(false);
   };
@@ -2357,7 +2375,7 @@ function Expenses({ accounts, expenses, currentUser, canEdit, onAdd, onEdit, onD
     const categoryName = expenseAccounts.find((a) => a.id === editForm.accountId)?.name || "Expense";
     const vendorLabel = editForm.vendor.trim() || categoryName;
     const updatedExpense = { date: editForm.date, vendor: vendorLabel, accountId: editForm.accountId, paymentAccountId: editForm.paymentAccountId, amount: amt, note: editForm.note.trim() };
-    const journalEntry = { date: editForm.date, memo: `Expense — ${vendorLabel}`, lines: [{ accountId: editForm.accountId, debit: amt, credit: 0 }, { accountId: editForm.paymentAccountId, debit: 0, credit: amt }], source: "expense" };
+    const journalEntry = { date: editForm.date, memo: `Expense \u2014 ${vendorLabel}`, lines: [{ accountId: editForm.accountId, debit: amt, credit: 0 }, { accountId: editForm.paymentAccountId, debit: 0, credit: amt }], source: "expense" };
     onEdit(expenseId, updatedExpense, journalEntry);
     setEditingId(null);
   };
@@ -2435,7 +2453,7 @@ function Expenses({ accounts, expenses, currentUser, canEdit, onAdd, onEdit, onD
             amount: amt, note: "Imported", createdBy: currentUser.name,
           };
           const je = {
-            id: uid("je"), date: rowDate, memo: `Expense — ${expense.vendor} (imported)`,
+            id: uid("je"), date: rowDate, memo: `Expense \u2014 ${expense.vendor} (imported)`,
             lines: [{ accountId: categoryAccount.id, debit: amt, credit: 0 }, { accountId: paymentAccount.id, debit: 0, credit: amt }],
             createdBy: currentUser.name, source: "expense", refId: expense.id,
           };
@@ -2471,7 +2489,7 @@ function Expenses({ accounts, expenses, currentUser, canEdit, onAdd, onEdit, onD
               padding: "10px 16px", borderRadius: 999, fontSize: 13.5, fontWeight: 600, border: `1px solid ${PALETTE.line}`, cursor: "pointer",
             }}>
               {importing ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : <FileText size={15} />}
-              {importing ? "Importing…" : "Import from Excel"}
+              {importing ? "Importing\u2026" : "Import from Excel"}
               <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} style={{ display: "none" }} />
             </label>
           )}
@@ -2538,8 +2556,8 @@ function Expenses({ accounts, expenses, currentUser, canEdit, onAdd, onEdit, onD
                 }
                 return (
                   <tr key={exp.id} className="row-hover" style={{ borderBottom: `1px solid ${PALETTE.line}` }}>
-                    <Td>{exp.date}</Td><Td>{exp.vendor}</Td><Td>{acc?.name || "—"}</Td>
-                    <Td style={{ color: PALETTE.inkSoft, fontSize: 12.5 }}>{paidFrom?.name || "—"}</Td>
+                    <Td>{exp.date}</Td><Td>{exp.vendor}</Td><Td>{acc?.name || "\u2014"}</Td>
+                    <Td style={{ color: PALETTE.inkSoft, fontSize: 12.5 }}>{paidFrom?.name || "\u2014"}</Td>
                     <Td align="right" mono>{fmtMoney(exp.amount)}</Td><Td>{exp.createdBy}</Td>
                     <Td>
                       {canEdit && (
@@ -2561,7 +2579,7 @@ function Expenses({ accounts, expenses, currentUser, canEdit, onAdd, onEdit, onD
 }
 
 /* ---------------------------------------------------------
-   Income — manual/other income (loans, investor funds, etc.)
+   Income \u2014 manual/other income (loans, investor funds, etc.)
 --------------------------------------------------------- */
 
 function IncomeTab({ accounts, incomeEntries, currentUser, canEdit, onAdd, onEdit, onDelete, onAddCategory }) {
@@ -2598,7 +2616,7 @@ function IncomeTab({ accounts, incomeEntries, currentUser, canEdit, onAdd, onEdi
     const categoryName = incomeAccounts.find((a) => a.id === accountId)?.name || "Income";
     const sourceLabel = source.trim() || categoryName;
     const entry = { date, source: sourceLabel, accountId, depositAccountId, amount: amt, note: note.trim() };
-    const journalEntry = { date, memo: `Income — ${sourceLabel}`, lines: [{ accountId: depositAccountId, debit: amt, credit: 0 }, { accountId, debit: 0, credit: amt }], source: "other-income" };
+    const journalEntry = { date, memo: `Income \u2014 ${sourceLabel}`, lines: [{ accountId: depositAccountId, debit: amt, credit: 0 }, { accountId, debit: 0, credit: amt }], source: "other-income" };
     onAdd(entry, journalEntry);
     setSource(""); setAmount(""); setNote(""); setOpen(false);
   };
@@ -2613,7 +2631,7 @@ function IncomeTab({ accounts, incomeEntries, currentUser, canEdit, onAdd, onEdi
     const categoryName = incomeAccounts.find((a) => a.id === editForm.accountId)?.name || "Income";
     const sourceLabel = editForm.source.trim() || categoryName;
     const updatedEntry = { date: editForm.date, source: sourceLabel, accountId: editForm.accountId, depositAccountId: editForm.depositAccountId, amount: amt, note: editForm.note.trim() };
-    const journalEntry = { date: editForm.date, memo: `Income — ${sourceLabel}`, lines: [{ accountId: editForm.depositAccountId, debit: amt, credit: 0 }, { accountId: editForm.accountId, debit: 0, credit: amt }], source: "other-income" };
+    const journalEntry = { date: editForm.date, memo: `Income \u2014 ${sourceLabel}`, lines: [{ accountId: editForm.depositAccountId, debit: amt, credit: 0 }, { accountId: editForm.accountId, debit: 0, credit: amt }], source: "other-income" };
     onEdit(entryId, updatedEntry, journalEntry);
     setEditingId(null);
   };
@@ -2621,7 +2639,7 @@ function IncomeTab({ accounts, incomeEntries, currentUser, canEdit, onAdd, onEdi
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
-        <PageHeader title="Income" subtitle="Record money coming in that isn't a product sale — loans, investor funds, refunds, etc." />
+        <PageHeader title="Income" subtitle="Record money coming in that isn't a product sale \u2014 loans, investor funds, refunds, etc." />
         {canEdit && <PrimaryButton onClick={() => setOpen((v) => !v)}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Income"}</PrimaryButton>}
       </div>
 
@@ -2693,8 +2711,8 @@ function IncomeTab({ accounts, incomeEntries, currentUser, canEdit, onAdd, onEdi
                 }
                 return (
                   <tr key={entry.id} className="row-hover" style={{ borderBottom: `1px solid ${PALETTE.line}` }}>
-                    <Td>{entry.date}</Td><Td>{entry.source}</Td><Td>{acc?.name || "—"}</Td>
-                    <Td style={{ color: PALETTE.inkSoft, fontSize: 12.5 }}>{depositAcc?.name || "—"}</Td>
+                    <Td>{entry.date}</Td><Td>{entry.source}</Td><Td>{acc?.name || "\u2014"}</Td>
+                    <Td style={{ color: PALETTE.inkSoft, fontSize: 12.5 }}>{depositAcc?.name || "\u2014"}</Td>
                     <Td align="right" mono style={{ color: PALETTE.credit }}>{fmtMoney(entry.amount)}</Td>
                     <Td>{entry.createdBy}</Td>
                     <Td>
@@ -2719,6 +2737,76 @@ function IncomeTab({ accounts, incomeEntries, currentUser, canEdit, onAdd, onEdi
 /* ---------------------------------------------------------
    Chart of Accounts
 --------------------------------------------------------- */
+
+/* ---------------------------------------------------------
+   Data Recovery \u2014 find journal/record entries pointing at an
+   account id that no longer exists in the Chart of Accounts
+   (e.g. after an accidental overwrite), and relink them to a
+   real account to restore the balance and transaction history.
+--------------------------------------------------------- */
+
+function DataRecoveryPanel({ accounts, journal, invoices, expenses, bills, incomeEntries, onRelink }) {
+  const [relinkTarget, setRelinkTarget] = useState({});
+
+  const existingIds = new Set(accounts.map((a) => a.id));
+  const usedIds = new Map(); // id -> { debit, credit, memos: Set }
+  journal.forEach((j) => {
+    j.lines.forEach((l) => {
+      if (!l.accountId || existingIds.has(l.accountId)) return;
+      if (!usedIds.has(l.accountId)) usedIds.set(l.accountId, { debit: 0, credit: 0, memos: [] });
+      const entry = usedIds.get(l.accountId);
+      entry.debit += Number(l.debit) || 0;
+      entry.credit += Number(l.credit) || 0;
+      if (entry.memos.length < 4 && j.memo && !entry.memos.includes(j.memo)) entry.memos.push(j.memo);
+    });
+  });
+
+  const orphans = [...usedIds.entries()].map(([id, v]) => ({ id, ...v, net: v.credit - v.debit }));
+
+  if (orphans.length === 0) return null;
+
+  return (
+    <Card style={{ marginBottom: 24, borderColor: PALETTE.debit }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+        <AlertCircle size={16} color={PALETTE.debit} />
+        <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600 }}>Data Recovery \u2014 {orphans.length} orphaned account{orphans.length > 1 ? "s" : ""} found</div>
+      </div>
+      <p style={{ fontSize: 12.5, color: PALETTE.inkSoft, marginTop: 4, marginBottom: 14 }}>
+        These are old transactions still in your books that point to an account that no longer exists (likely from the recent
+        data issue). Nothing is lost \u2014 pick which current account each one should belong to, and its balance and history will be restored.
+      </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {orphans.map((o) => (
+          <div key={o.id} style={{ padding: 12, border: `1px solid ${PALETTE.line}`, borderRadius: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 6 }}>
+              <div style={{ fontSize: 12.5, color: PALETTE.inkSoft, fontFamily: FONT.mono }}>ID: {o.id}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, fontFamily: FONT.mono, color: o.net >= 0 ? PALETTE.credit : PALETTE.debit }}>Net: {fmtMoney(o.net)}</div>
+            </div>
+            {o.memos.length > 0 && (
+              <div style={{ fontSize: 11.5, color: PALETTE.inkSoft, marginBottom: 8 }}>
+                Sample entries: {o.memos.join(" \u00B7 ")}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <select style={{ ...inputStyle, width: "auto", minWidth: 200, padding: "6px 10px" }} value={relinkTarget[o.id] || ""} onChange={(e) => setRelinkTarget({ ...relinkTarget, [o.id]: e.target.value })}>
+                <option value="">Relink to which account?</option>
+                {accounts.map((a) => <option key={a.id} value={a.id}>{a.name} ({a.type})</option>)}
+              </select>
+              <button
+                className="pin-btn"
+                disabled={!relinkTarget[o.id]}
+                onClick={() => onRelink(o.id, relinkTarget[o.id])}
+                style={{ background: PALETTE.credit, color: "#fff", fontSize: 12.5, padding: "7px 16px", borderRadius: 999, opacity: relinkTarget[o.id] ? 1 : 0.5 }}
+              >
+                Relink & Restore
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
 
 function ChartOfAccounts({ accounts, balances, currentUser, canEdit, onAdd, onAddMany, onEdit, onDelete, onAdjustBalance, onTransfer }) {
   const [open, setOpen] = useState(false);
@@ -2803,20 +2891,20 @@ function ChartOfAccounts({ accounts, balances, currentUser, canEdit, onAdd, onAd
       {transferOpen && (
         <Card style={{ marginBottom: 20 }}>
           <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Transfer Between Accounts</div>
-          <p style={{ fontSize: 12.5, color: PALETTE.inkSoft, marginTop: 0, marginBottom: 14 }}>Move money from one account to another — e.g. Cash to Bank, or Bank to bKash.</p>
+          <p style={{ fontSize: 12.5, color: PALETTE.inkSoft, marginTop: 0, marginBottom: 14 }}>Move money from one account to another \u2014 e.g. Cash to Bank, or Bank to bKash.</p>
           <form onSubmit={submitTransfer} className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 140px", gap: 10 }}>
             <div>
               <label style={labelStyle}>From</label>
               <select style={inputStyle} value={transferForm.from} onChange={(e) => setTransferForm({ ...transferForm, from: e.target.value })}>
                 <option value="">Select account</option>
-                {accounts.map((a) => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
+                {accounts.map((a) => <option key={a.id} value={a.id}>{a.code} \u2014 {a.name}</option>)}
               </select>
             </div>
             <div>
               <label style={labelStyle}>To</label>
               <select style={inputStyle} value={transferForm.to} onChange={(e) => setTransferForm({ ...transferForm, to: e.target.value })}>
                 <option value="">Select account</option>
-                {accounts.map((a) => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
+                {accounts.map((a) => <option key={a.id} value={a.id}>{a.code} \u2014 {a.name}</option>)}
               </select>
             </div>
             <div><label style={labelStyle}>Amount (BDT)</label><input style={inputStyle} type="number" value={transferForm.amount} onChange={(e) => setTransferForm({ ...transferForm, amount: e.target.value })} placeholder="0" /></div>
@@ -2930,7 +3018,7 @@ function Journal({ accounts, journal, currentUser, canEdit, onAdd, onDelete }) {
               <div key={i} className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 130px 130px 30px", gap: 8, marginBottom: 8, alignItems: "center" }}>
                 <select style={inputStyle} value={l.accountId} onChange={(e) => updateLine(i, "accountId", e.target.value)}>
                   <option value="">Select account</option>
-                  {accounts.map((a) => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
+                  {accounts.map((a) => <option key={a.id} value={a.id}>{a.code} \u2014 {a.name}</option>)}
                 </select>
                 <input style={inputStyle} type="number" placeholder="Debit" value={l.debit} onChange={(e) => updateLine(i, "debit", e.target.value)} />
                 <input style={inputStyle} type="number" placeholder="Credit" value={l.credit} onChange={(e) => updateLine(i, "credit", e.target.value)} />
@@ -2961,7 +3049,7 @@ function Journal({ accounts, journal, currentUser, canEdit, onAdd, onDelete }) {
                     <Td>{j.date}</Td><Td>{j.memo}</Td>
                     <Td>{j.lines.map((l, idx) => {
                       const acc = accounts.find((a) => a.id === l.accountId);
-                      return <div key={idx} style={{ fontSize: 12, fontFamily: FONT.mono, color: PALETTE.inkSoft }}>{acc?.name || "—"}: {l.debit ? `Dr ${fmtMoney(l.debit)}` : `Cr ${fmtMoney(l.credit)}`}</div>;
+                      return <div key={idx} style={{ fontSize: 12, fontFamily: FONT.mono, color: PALETTE.inkSoft }}>{acc?.name || "\u2014"}: {l.debit ? `Dr ${fmtMoney(l.debit)}` : `Cr ${fmtMoney(l.credit)}`}</div>;
                     })}</Td>
                     <Td align="right" mono>{fmtMoney(total)}</Td><Td>{j.createdBy}</Td>
                     {isAdmin && <Td><button className="pin-btn" onClick={() => onDelete(j.id)} style={{ background: "transparent", color: PALETTE.debit }}><Trash2 size={14} /></button></Td>}
@@ -2999,7 +3087,7 @@ function Reports({ accounts, balances, invoices, expenses, journal, products }) 
     return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
   };
 
-  // Sales by month — from invoice totals (what was invoiced, regardless of payment)
+  // Sales by month \u2014 from invoice totals (what was invoiced, regardless of payment)
   const salesByMonth = useMemo(() => {
     const map = {};
     invoices.filter((inv) => inRange(inv.date)).forEach((inv) => {
@@ -3009,7 +3097,7 @@ function Reports({ accounts, balances, invoices, expenses, journal, products }) 
     return Object.entries(map).sort((a, b) => b[0].localeCompare(a[0]));
   }, [invoices, fromDate, toDate]);
 
-  // Income by month — from journal lines that credited an income-type account (cash actually received)
+  // Income by month \u2014 from journal lines that credited an income-type account (cash actually received)
   const incomeByMonth = useMemo(() => {
     const incomeAccountIds = new Set(accounts.filter((a) => a.type === "income").map((a) => a.id));
     const map = {};
@@ -3034,7 +3122,7 @@ function Reports({ accounts, balances, invoices, expenses, journal, products }) 
     return Object.entries(map).sort((a, b) => b[0].localeCompare(a[0]));
   }, [expenses, fromDate, toDate]);
 
-  // Sales by Customer Summary — grouped by "Sales By" team/person, then customer
+  // Sales by Customer Summary \u2014 grouped by "Sales By" team/person, then customer
   const salesByCustomer = useMemo(() => {
     const groups = {};
     invoices.filter((inv) => inRange(inv.date)).forEach((inv) => {
@@ -3050,7 +3138,7 @@ function Reports({ accounts, balances, invoices, expenses, journal, products }) 
   }, [invoices, fromDate, toDate]);
   const salesByCustomerGrandTotal = salesByCustomer.reduce((s, g) => s + g.total, 0);
 
-  // Sales by Product Summary — grouped by product category
+  // Sales by Product Summary \u2014 grouped by product category
   const salesByProduct = useMemo(() => {
     const productMap = {};
     products.forEach((p) => { productMap[p.id] = p; });
@@ -3082,7 +3170,7 @@ function Reports({ accounts, balances, invoices, expenses, journal, products }) 
   }, [invoices, products, fromDate, toDate]);
   const salesByProductGrandTotal = salesByProduct.reduce((s, g) => s + g.amount, 0);
 
-  // Profit & Loss — Income (by income account, in range), Cost of Sales (COGS, in range), Expenses (by category, in range)
+  // Profit & Loss \u2014 Income (by income account, in range), Cost of Sales (COGS, in range), Expenses (by category, in range)
   const profitLoss = useMemo(() => {
     const incomeAccounts = accounts.filter((a) => a.type === "income");
     const cogsAccount = accounts.find((a) => a.name === "Cost of Goods Sold");
@@ -3152,7 +3240,7 @@ function Reports({ accounts, balances, invoices, expenses, journal, products }) 
 
   return (
     <div>
-      <PageHeader title="Reports" subtitle="Sales, income, and expense reports by month — filter by date to customize" />
+      <PageHeader title="Reports" subtitle="Sales, income, and expense reports by month \u2014 filter by date to customize" />
 
       <Card style={{ marginBottom: 20, padding: 16 }}>
         <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 10, alignItems: "end" }}>
@@ -3197,7 +3285,7 @@ function Reports({ accounts, balances, invoices, expenses, journal, products }) 
         )}
       </Card>
 
-      <PageHeader title="Sales by Product Summary" subtitle="Quantity, revenue, cost of sales, and margin — grouped by category" />
+      <PageHeader title="Sales by Product Summary" subtitle="Quantity, revenue, cost of sales, and margin \u2014 grouped by category" />
       <Card style={{ marginBottom: 24 }}>
         {salesByProduct.length === 0 ? <EmptyState text="No sales for this period" /> : (
           <div style={{ overflowX: "auto" }}><table style={{ minWidth: 640 }}>
@@ -3213,7 +3301,7 @@ function Reports({ accounts, balances, invoices, expenses, journal, products }) 
                       <Td align="right" mono>{fmtMoney(it.amount)}</Td>
                       <Td align="right" mono>{fmtMoney(it.cos)}</Td>
                       <Td align="right" mono>{fmtMoney(it.margin)}</Td>
-                      <Td align="right" mono>{it.amount > 0 ? `${((it.margin / it.amount) * 100).toFixed(1)}%` : "—"}</Td>
+                      <Td align="right" mono>{it.amount > 0 ? `${((it.margin / it.amount) * 100).toFixed(1)}%` : "\u2014"}</Td>
                     </tr>
                   ))}
                   <tr style={{ borderBottom: `1px solid ${PALETTE.line}` }}>
@@ -3222,7 +3310,7 @@ function Reports({ accounts, balances, invoices, expenses, journal, products }) 
                     <Td align="right" mono style={{ fontWeight: 700 }}>{fmtMoney(g.amount)}</Td>
                     <Td align="right" mono style={{ fontWeight: 700 }}>{fmtMoney(g.cos)}</Td>
                     <Td align="right" mono style={{ fontWeight: 700 }}>{fmtMoney(g.margin)}</Td>
-                    <Td align="right" mono style={{ fontWeight: 700 }}>{g.amount > 0 ? `${((g.margin / g.amount) * 100).toFixed(1)}%` : "—"}</Td>
+                    <Td align="right" mono style={{ fontWeight: 700 }}>{g.amount > 0 ? `${((g.margin / g.amount) * 100).toFixed(1)}%` : "\u2014"}</Td>
                   </tr>
                 </React.Fragment>
               ))}
@@ -3278,14 +3366,14 @@ function Reports({ accounts, balances, invoices, expenses, journal, products }) 
         </div>
       </Card>
 
-      <PageHeader title="Trial Balance" subtitle="Debit and credit balances for every account — the two columns should match when the books are correct" />
+      <PageHeader title="Trial Balance" subtitle="Debit and credit balances for every account \u2014 the two columns should match when the books are correct" />
       <Card>
         <div style={{ overflowX: "auto" }}><table style={{ minWidth: 560 }}>
           <thead><tr style={{ borderBottom: `2px solid ${PALETTE.ink}` }}><Th>Code</Th><Th>Account</Th><Th align="right">Debit</Th><Th align="right">Credit</Th></tr></thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.id} className="row-hover" style={{ borderBottom: `1px solid ${PALETTE.line}` }}>
-                <Td mono>{r.code}</Td><Td>{r.name}</Td><Td align="right" mono>{r.debit ? fmtMoney(r.debit) : "—"}</Td><Td align="right" mono>{r.credit ? fmtMoney(r.credit) : "—"}</Td>
+                <Td mono>{r.code}</Td><Td>{r.name}</Td><Td align="right" mono>{r.debit ? fmtMoney(r.debit) : "\u2014"}</Td><Td align="right" mono>{r.credit ? fmtMoney(r.credit) : "\u2014"}</Td>
               </tr>
             ))}
           </tbody>
@@ -3293,7 +3381,7 @@ function Reports({ accounts, balances, invoices, expenses, journal, products }) 
         </table></div>
         <div style={{ marginTop: 14, fontSize: 13, color: totalDebit === totalCredit ? PALETTE.credit : PALETTE.debit, display: "flex", alignItems: "center", gap: 6 }}>
           {totalDebit === totalCredit ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
-          {totalDebit === totalCredit ? "Books balance (Debit = Credit)" : "Books don't balance — check journal entries"}
+          {totalDebit === totalCredit ? "Books balance (Debit = Credit)" : "Books don't balance \u2014 check journal entries"}
         </div>
       </Card>
     </div>
@@ -3359,11 +3447,11 @@ function UsersPanel({ users, onAdd, onEdit, onDelete }) {
   };
 
   const summaryFor = (u) => {
-    if (u.role === "admin") return "Admin — full access";
+    if (u.role === "admin") return "Admin \u2014 full access";
     const perms = normalizePerms(u.permissions);
     const editCount = Object.values(perms).filter((v) => v === "edit").length;
     const viewCount = Object.values(perms).filter((v) => v === "view").length;
-    return `Staff — ${editCount} editable, ${viewCount} view-only of ${ALL_TABS.length} menus`;
+    return `Staff \u2014 ${editCount} editable, ${viewCount} view-only of ${ALL_TABS.length} menus`;
   };
 
   const PermTable = ({ map, setMap }) => (
@@ -3398,7 +3486,7 @@ function UsersPanel({ users, onAdd, onEdit, onDelete }) {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
-        <PageHeader title="Users" subtitle="Manage your team's access — choose which menus each person can see, and whether they can edit or just view" />
+        <PageHeader title="Users" subtitle="Manage your team's access \u2014 choose which menus each person can see, and whether they can edit or just view" />
         <PrimaryButton onClick={() => setOpen((v) => !v)}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New User"}</PrimaryButton>
       </div>
 
@@ -3455,7 +3543,7 @@ function UsersPanel({ users, onAdd, onEdit, onDelete }) {
           ))}
         </div>
       </Card>
-      <p style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 12 }}>Note: this PIN system is a simple access control for your 4–5 trusted team members — not banking-grade security. Don't share the link outside your team.</p>
+      <p style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 12 }}>Note: this PIN system is a simple access control for your 4\u20135 trusted team members \u2014 not banking-grade security. Don't share the link outside your team.</p>
     </div>
   );
 }
