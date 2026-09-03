@@ -659,7 +659,7 @@ export default function App() {
       <div style={styles.bootScreen}>
         <GlobalStyles />
         <Loader2 size={28} style={{ animation: "spin 1s linear infinite" }} />
-        <p style={{ marginTop: 12, fontFamily: FONT.body, color: PALETTE.ink }}>Loading\u2026</p>
+        <p style={{ marginTop: 12, fontFamily: FONT.body, color: PALETTE.ink }}>{"Loading\u2026"}</p>
         <style>{`@keyframes spin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }`}</style>
       </div>
     );
@@ -1133,7 +1133,7 @@ function LoginScreen({ users, onCreateFirstAdmin, onLogin }) {
         <PrimaryButton type="submit" style={{ width: "100%", marginTop: 20, justifyContent: "center", padding: "12px 0" }}>
           {isFirstRun ? "Create Admin Account" : "Sign In"}
         </PrimaryButton>
-        {!isFirstRun && <p style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 16, lineHeight: 1.5 }}>To add a new user, ask your Admin \u2014 new team members can be added from the "Users" tab after logging in.</p>}
+        {!isFirstRun && <p style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 16, lineHeight: 1.5 }}>{"To add a new user, ask your Admin \u2014 new team members can be added from the \"Users\" tab after logging in."}</p>}
       </form>
     </div>
   );
@@ -1473,7 +1473,7 @@ function Inventory({ products, currentUser, canEdit, onAdd, onEdit, onDelete, on
             style={{ ...inputStyle, paddingLeft: 38 }}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search products by name or SKU\u2026"
+            placeholder={"Search products by name or SKU\u2026"}
           />
         </div>
       </Card>
@@ -1593,7 +1593,7 @@ function Bills({ accounts, products, bills, currentUser, canEdit, onAdd, onMarkP
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
-        <PageHeader title="Bills" subtitle="Record a purchase \u2014 stock is added to inventory automatically" />
+        <PageHeader title="Bills" subtitle={"Record a purchase \u2014 stock is added to inventory automatically"} />
         {canEdit && <PrimaryButton onClick={() => setOpen((v) => !v)}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Bill"}</PrimaryButton>}
       </div>
 
@@ -1607,7 +1607,7 @@ function Bills({ accounts, products, bills, currentUser, canEdit, onAdd, onMarkP
 
               <div style={{ marginTop: 14 }}>
                 <label style={labelStyle}>Items Purchased</label>
-                {products.length === 0 && <p style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 0 }}>No products yet \u2014 use "+ Add New Product" below to create one on the spot.</p>}
+                {products.length === 0 && <p style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 0 }}>{'No products yet \u2014 use "+ Add New Product" below to create one on the spot.'}</p>}
                 {items.map((it, i) => (
                   <div key={i} style={{ marginBottom: 8 }}>
                     <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 90px 120px 30px", gap: 8 }}>
@@ -1672,7 +1672,7 @@ function Bills({ accounts, products, bills, currentUser, canEdit, onAdd, onMarkP
                         payFor === b.id ? (
                           <>
                             <select style={{ ...inputStyle, padding: "4px 6px", fontSize: 12, width: "auto" }} value={payAccount} onChange={(e) => setPayAccount(e.target.value)}>
-                              <option value="">Pay from\u2026</option>
+                              <option value="">{"Pay from\u2026"}</option>
                               {cashAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                             </select>
                             <button className="pin-btn" disabled={!payAccount} onClick={() => { onMarkPaid(b, payAccount); setPayFor(null); setPayAccount(""); }} style={{ background: PALETTE.credit, color: "#fff", fontSize: 12, padding: "5px 10px", borderRadius: 999, opacity: payAccount ? 1 : 0.5 }}>Confirm</button>
@@ -1943,7 +1943,7 @@ function Invoices({ accounts, products, invoices, currentUser, canEdit, onAdd, o
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
-        <PageHeader title="Invoices" subtitle="Create a new invoice \u2014 inventory and journal entries update automatically" />
+        <PageHeader title="Invoices" subtitle={"Create a new invoice \u2014 inventory and journal entries update automatically"} />
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {canEdit && (
             <label className="pin-btn" style={{
@@ -1970,7 +1970,7 @@ function Invoices({ accounts, products, invoices, currentUser, canEdit, onAdd, o
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
             <div>
               <div style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 600 }}>{editingInvoice ? `Editing ${editingInvoice.number}` : "New Invoice"}</div>
-              <div style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 2 }}>Customer & Invoice Info \u2014 fill details, add items below</div>
+              <div style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 2 }}>{"Customer & Invoice Info \u2014 fill details, add items below"}</div>
             </div>
             {editingInvoice && (
               <div style={{ textAlign: "right" }}>
@@ -2035,7 +2035,7 @@ function Invoices({ accounts, products, invoices, currentUser, canEdit, onAdd, o
                           <input style={{ ...inputStyle, padding: "7px 10px" }} type="number" placeholder="Cost price" value={quickAddForm.costPrice} onChange={(e) => setQuickAddForm({ ...quickAddForm, costPrice: e.target.value })} />
                           <input style={{ ...inputStyle, padding: "7px 10px" }} type="number" placeholder="Sale price" value={quickAddForm.salePrice} onChange={(e) => setQuickAddForm({ ...quickAddForm, salePrice: e.target.value })} />
                         </div>
-                        <p style={{ fontSize: 11, color: PALETTE.inkSoft, margin: "8px 0 0" }}>This creates the product with 0 stock \u2014 selling it here will take that stock negative until you record a Bill to stock it in.</p>
+                        <p style={{ fontSize: 11, color: PALETTE.inkSoft, margin: "8px 0 0" }}>{"This creates the product with 0 stock \u2014 selling it here will take that stock negative until you record a Bill to stock it in."}</p>
                         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                           <button type="button" className="pin-btn" onClick={() => confirmQuickAdd(i)} style={{ background: PALETTE.credit, color: "#fff", fontSize: 12, padding: "6px 14px", borderRadius: 999 }}>Create & Use</button>
                           <button type="button" className="pin-btn" onClick={() => setQuickAddRow(null)} style={{ background: "transparent", color: PALETTE.inkSoft, fontSize: 12 }}>Cancel</button>
@@ -2056,7 +2056,7 @@ function Invoices({ accounts, products, invoices, currentUser, canEdit, onAdd, o
                 style={{ ...inputStyle, minHeight: 64, resize: "vertical", fontFamily: FONT.body }}
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                placeholder="e.g. delivery instructions, thank-you message \u2014 shown on the invoice and PDF"
+                placeholder={"e.g. delivery instructions, thank-you message \u2014 shown on the invoice and PDF"}
               />
             </div>
 
@@ -2084,7 +2084,7 @@ function Invoices({ accounts, products, invoices, currentUser, canEdit, onAdd, o
                     {Number(deposit) > 0 && (
                       <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
                         <select style={{ ...inputStyle, padding: "6px 8px", fontSize: 12.5 }} value={depositMethod} onChange={(e) => setDepositMethod(e.target.value)}>{PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}</select>
-                        <select style={{ ...inputStyle, padding: "6px 8px", fontSize: 12.5 }} value={depositAccount} onChange={(e) => setDepositAccount(e.target.value)}><option value="">Deposit to\u2026</option>{cashAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
+                        <select style={{ ...inputStyle, padding: "6px 8px", fontSize: 12.5 }} value={depositAccount} onChange={(e) => setDepositAccount(e.target.value)}><option value="">{"Deposit to\u2026"}</option>{cashAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
                       </div>
                     )}
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${PALETTE.line}`, paddingTop: 8 }}>
@@ -2199,7 +2199,7 @@ function ReceivePaymentPage({ invoice, cashAccounts, onClose, onConfirm }) {
           <div style={{ fontFamily: FONT.display, fontSize: 19, fontWeight: 600 }}>Receive Payment</div>
           <button className="pin-btn" onClick={onClose} style={{ background: PALETTE.chip, padding: 8, borderRadius: 999 }}><X size={16} /></button>
         </div>
-        <p style={{ fontSize: 13, color: PALETTE.inkSoft, marginTop: 0, marginBottom: 20 }}>{invoice.number} \u2014 {invoice.customer}</p>
+        <p style={{ fontSize: 13, color: PALETTE.inkSoft, marginTop: 0, marginBottom: 20 }}>{invoice.number} {"\u2014"} {invoice.customer}</p>
 
         <Card style={{ marginBottom: 18, padding: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: PALETTE.inkSoft, marginBottom: 4 }}><span>Total</span><span style={{ fontFamily: FONT.mono, color: PALETTE.ink }}>{fmtMoney(invoice.total)}</span></div>
@@ -2331,7 +2331,7 @@ function InvoiceDetailModal({ invoice, accounts, onClose, onEdit, onReceivePayme
                     <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
                       <select style={{ ...inputStyle, padding: "6px 8px" }} value={paymentForm.method} onChange={(e) => setPaymentForm({ ...paymentForm, method: e.target.value })}>{PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}</select>
                       <select style={{ ...inputStyle, padding: "6px 8px" }} value={paymentForm.accountId} onChange={(e) => setPaymentForm({ ...paymentForm, accountId: e.target.value })}>
-                        <option value="">Account\u2026</option>
+                        <option value="">{"Account\u2026"}</option>
                         {cashAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                       </select>
                     </div>
@@ -2682,7 +2682,7 @@ function IncomeTab({ accounts, incomeEntries, currentUser, canEdit, onAdd, onEdi
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
-        <PageHeader title="Income" subtitle="Record money coming in that isn't a product sale \u2014 loans, investor funds, refunds, etc." />
+        <PageHeader title="Income" subtitle={"Record money coming in that isn't a product sale \u2014 loans, investor funds, refunds, etc."} />
         {canEdit && <PrimaryButton onClick={() => setOpen((v) => !v)}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New Income"}</PrimaryButton>}
       </div>
 
@@ -2813,10 +2813,10 @@ function TextRepairPanel({ journal, invoices, expenses, bills, incomeEntries, on
     <Card style={{ marginBottom: 24, borderColor: PALETTE.debit }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
         <AlertCircle size={16} color={PALETTE.debit} />
-        <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600 }}>Garbled Text Found \u2014 {findings.length} entr{findings.length > 1 ? "ies" : "y"}</div>
+        <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600 }}>{"Garbled Text Found \u2014 "}{findings.length}{" entr"}{findings.length > 1 ? "ies" : "y"}</div>
       </div>
       <p style={{ fontSize: 12.5, color: PALETTE.inkSoft, marginTop: 4, marginBottom: 12 }}>
-        Some old memos/notes got corrupted by a text-encoding bug (now fixed for new entries). This will repair the saved text \u2014 nothing else changes.
+        Some old memos/notes got corrupted by a text-encoding bug (now fixed for new entries). This will repair the saved text {"\u2014"} nothing else changes.
       </p>
       <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
         {samples.map((s, i) => (
@@ -2863,7 +2863,7 @@ function DataRecoveryPanel({ accounts, journal, invoices, expenses, bills, incom
     <Card style={{ marginBottom: 24, borderColor: PALETTE.debit }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
         <AlertCircle size={16} color={PALETTE.debit} />
-        <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600 }}>Data Recovery \u2014 {orphans.length} orphaned account{orphans.length > 1 ? "s" : ""} found</div>
+        <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600 }}>{"Data Recovery \u2014 "}{orphans.length}{" orphaned account"}{orphans.length > 1 ? "s" : ""}{" found"}</div>
       </div>
       <p style={{ fontSize: 12.5, color: PALETTE.inkSoft, marginTop: 4, marginBottom: 14 }}>
         These are old transactions still in your books that point to an account that no longer exists (likely from the recent
@@ -3010,20 +3010,20 @@ function ChartOfAccounts({ accounts, balances, currentUser, canEdit, onAdd, onAd
       {transferOpen && (
         <Card style={{ marginBottom: 20 }}>
           <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Transfer Between Accounts</div>
-          <p style={{ fontSize: 12.5, color: PALETTE.inkSoft, marginTop: 0, marginBottom: 14 }}>Move money from one account to another \u2014 e.g. Cash to Bank, or Bank to bKash.</p>
+          <p style={{ fontSize: 12.5, color: PALETTE.inkSoft, marginTop: 0, marginBottom: 14 }}>{"Move money from one account to another \u2014 e.g. Cash to Bank, or Bank to bKash."}</p>
           <form onSubmit={submitTransfer} className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 140px", gap: 10 }}>
             <div>
               <label style={labelStyle}>From</label>
               <select style={inputStyle} value={transferForm.from} onChange={(e) => setTransferForm({ ...transferForm, from: e.target.value })}>
                 <option value="">Select account</option>
-                {accounts.map((a) => <option key={a.id} value={a.id}>{a.code} \u2014 {a.name}</option>)}
+                {accounts.map((a) => <option key={a.id} value={a.id}>{a.code} {"\u2014"} {a.name}</option>)}
               </select>
             </div>
             <div>
               <label style={labelStyle}>To</label>
               <select style={inputStyle} value={transferForm.to} onChange={(e) => setTransferForm({ ...transferForm, to: e.target.value })}>
                 <option value="">Select account</option>
-                {accounts.map((a) => <option key={a.id} value={a.id}>{a.code} \u2014 {a.name}</option>)}
+                {accounts.map((a) => <option key={a.id} value={a.id}>{a.code} {"\u2014"} {a.name}</option>)}
               </select>
             </div>
             <div><label style={labelStyle}>Amount (BDT)</label><input style={inputStyle} type="number" value={transferForm.amount} onChange={(e) => setTransferForm({ ...transferForm, amount: e.target.value })} placeholder="0" /></div>
@@ -3137,7 +3137,7 @@ function Journal({ accounts, journal, currentUser, canEdit, onAdd, onDelete }) {
               <div key={i} className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 130px 130px 30px", gap: 8, marginBottom: 8, alignItems: "center" }}>
                 <select style={inputStyle} value={l.accountId} onChange={(e) => updateLine(i, "accountId", e.target.value)}>
                   <option value="">Select account</option>
-                  {accounts.map((a) => <option key={a.id} value={a.id}>{a.code} \u2014 {a.name}</option>)}
+                  {accounts.map((a) => <option key={a.id} value={a.id}>{a.code} {"\u2014"} {a.name}</option>)}
                 </select>
                 <input style={inputStyle} type="number" placeholder="Debit" value={l.debit} onChange={(e) => updateLine(i, "debit", e.target.value)} />
                 <input style={inputStyle} type="number" placeholder="Credit" value={l.credit} onChange={(e) => updateLine(i, "credit", e.target.value)} />
@@ -3359,7 +3359,7 @@ function Reports({ accounts, balances, invoices, expenses, journal, products }) 
 
   return (
     <div>
-      <PageHeader title="Reports" subtitle="Sales, income, and expense reports by month \u2014 filter by date to customize" />
+      <PageHeader title="Reports" subtitle={"Sales, income, and expense reports by month \u2014 filter by date to customize"} />
 
       <Card style={{ marginBottom: 20, padding: 16 }}>
         <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 10, alignItems: "end" }}>
@@ -3404,7 +3404,7 @@ function Reports({ accounts, balances, invoices, expenses, journal, products }) 
         )}
       </Card>
 
-      <PageHeader title="Sales by Product Summary" subtitle="Quantity, revenue, cost of sales, and margin \u2014 grouped by category" />
+      <PageHeader title="Sales by Product Summary" subtitle={"Quantity, revenue, cost of sales, and margin \u2014 grouped by category"} />
       <Card style={{ marginBottom: 24 }}>
         {salesByProduct.length === 0 ? <EmptyState text="No sales for this period" /> : (
           <div style={{ overflowX: "auto" }}><table style={{ minWidth: 640 }}>
@@ -3485,7 +3485,7 @@ function Reports({ accounts, balances, invoices, expenses, journal, products }) 
         </div>
       </Card>
 
-      <PageHeader title="Trial Balance" subtitle="Debit and credit balances for every account \u2014 the two columns should match when the books are correct" />
+      <PageHeader title="Trial Balance" subtitle={"Debit and credit balances for every account \u2014 the two columns should match when the books are correct"} />
       <Card>
         <div style={{ overflowX: "auto" }}><table style={{ minWidth: 560 }}>
           <thead><tr style={{ borderBottom: `2px solid ${PALETTE.ink}` }}><Th>Code</Th><Th>Account</Th><Th align="right">Debit</Th><Th align="right">Credit</Th></tr></thead>
@@ -3605,7 +3605,7 @@ function UsersPanel({ users, onAdd, onEdit, onDelete }) {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
-        <PageHeader title="Users" subtitle="Manage your team's access \u2014 choose which menus each person can see, and whether they can edit or just view" />
+        <PageHeader title="Users" subtitle={"Manage your team's access \u2014 choose which menus each person can see, and whether they can edit or just view"} />
         <PrimaryButton onClick={() => setOpen((v) => !v)}>{open ? <X size={15} /> : <Plus size={15} />} {open ? "Cancel" : "New User"}</PrimaryButton>
       </div>
 
@@ -3662,7 +3662,7 @@ function UsersPanel({ users, onAdd, onEdit, onDelete }) {
           ))}
         </div>
       </Card>
-      <p style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 12 }}>Note: this PIN system is a simple access control for your 4\u20135 trusted team members \u2014 not banking-grade security. Don't share the link outside your team.</p>
+      <p style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 12 }}>{"Note: this PIN system is a simple access control for your 4\u20135 trusted team members \u2014 not banking-grade security. Don't share the link outside your team."}</p>
     </div>
   );
 }
